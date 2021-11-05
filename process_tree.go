@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"runtime"
 
@@ -11,13 +12,13 @@ import (
 
 var (
 	MaxSnap = 235
-	TreeFileNames = []string{ "path/to/file" }
-	CentralRootID = 9285216
-	SubhaloRootIDs = []int{ 9278166, 9285216 }
+	TreeFileNames = []string{ "/scratch/users/enadler/Halo416/rockstar/trees/tree_0_0_0.dat" }
+	CentralID = 9285216
+	SubhaloIDs = []int{ 9278166, 9285216 }
 	
-	RootIDs = append([]int{CentralRootID}, SubhaloRootIDs...)
+	HaloIDs = append([]int{CentralID}, SubhaloIDs...)
 
-	OutputFileName = "halo_tracks"
+	OutputFileName = "/scratch/users/phil1/lmc_ges_tracking/Halo416/halo_tracks.txt"
 )
 
 // Haloes is a collection of raw columns from the tree.dat files.
@@ -35,9 +36,13 @@ type HaloTrack struct {
 func main() {
 	tracks := []HaloTrack{ }
 
+	cfg := catio.DefaultConfig
+	cfg.SkipLines = 46
+
 	// Loop over different tree files
 	for i := range TreeFileNames {
-		rd := catio.TextFile(TreeFileNames[i])
+		log.Println("Reading", TreeFileNames[i])
+		rd := catio.TextFile(TreeFileNames[i], cfg)
 
 		// If the tree files are too large to load into memory at once,
 		// break it up and read each block separately.
@@ -45,33 +50,39 @@ func main() {
 			runtime.GC()
 
 			// Read the columns
+			log.Printf("Read ints for block %d", b)
 			iCols := rd.ReadIntBlock([]int{1, 28, 31}, b)
 			id, dfid, snap := iCols[0], iCols[1], iCols[2]
 			
+			log.Printf("Read ints for block %d", b)
 			fCols := rd.ReadFloat32Block([]int{11, 17, 18, 19}, b)
 			rvir, x, y, z := fCols[0], fCols[1], fCols[2], fCols[3]
 
 			h := &Haloes{ id, dfid, snap, x, y, z, rvir }
 
+			log.Println("Getting tracks")
 			// Find tracks from the currently-read block
-			tracks = append(tracks, GetTracks(h, RootIDs)...)
+			tracks = append(tracks, GetTracks(h, HaloIDs)...)
 		}
 	}
 
-	WriteTracks(tracks, CentralRootID, OutputFileName)
+	log.Println("Writing")
+	WriteTracks(tracks, CentralID, OutputFileName)
 }
 
 // GetTracks returns all the tracks for haloes whose roots are within rootIDs.
-func GetTracks(h *Haloes, rootIDs []int) []HaloTrack {
+func GetTracks(h *Haloes, haloIDs []int) []HaloTrack {
 	tracks := []HaloTrack{ }
-	
+
 	order := IDOrder(h.DFID)
+	log.Println("Finished sorting")
 
 	for j := range order {
 		i := order[j]
 
-		for k := range rootIDs {
-			if h.DFID[i] == rootIDs[k] {
+		for k := range haloIDs {
+			if h.DFID[i] == haloIDs[k] {
+				log.Println("Finished halo track", k)
 				tracks = append(tracks, GetSingleTrack(h, order, j))
 			}
 		}
@@ -107,7 +118,10 @@ func GetSingleTrack(h *Haloes, order []int, j0 int) HaloTrack {
 		track.X[i], track.Y[i], track.Z[i], track.Rvir[i] = -1, -1, -1, -1
 	}
 	
-	for j := j0; ; j++ {
+	jStart := FirstBranchIndex(h.DFID, h.Snap, order, j0)
+	jEnd := LastBranchIndex(h.DFID, h.Snap, order, j0)
+
+	for j := jStart; j <= jEnd; j++ {
 		i := order[j]
 		snap := h.Snap[i]
 
@@ -115,13 +129,35 @@ func GetSingleTrack(h *Haloes, order []int, j0 int) HaloTrack {
 		track.Y[snap] = h.Y[i]
 		track.Z[snap] = h.Z[i]
 		track.Rvir[snap] = h.Rvir[i]
-
-		if j == len(order) - 1 { break }
-		iNext := order[j+1]
-		if h.DFID[i]+1 != h.DFID[iNext] || h.Snap[i] <= h.Snap[iNext] { break }
 	}
 
 	return track
+}
+
+// j0 indexes into order. Returns an index into order
+func LastBranchIndex(dfid, snap, order []int, j0 int) int {
+	for j := j0; ; j++ {
+		if j == len(order) - 1 { return j }
+
+		currDFID, currSnap := dfid[order[j]], snap[order[j]]
+		nextDFID, nextSnap := dfid[order[j + 1]], snap[order[j + 1]]
+
+		if nextDFID - 1 != currDFID || nextSnap >= currSnap { return j }
+	}
+	panic("Impossible")
+}
+
+// j0 indexes into order. Returns an index into order
+func FirstBranchIndex(dfid, snap, order []int, j0 int) int {
+	for j := j0;  ; j-- {
+		if j == 0 { return j }
+
+		currDFID, currSnap := dfid[order[j]], snap[order[j]]
+		nextDFID, nextSnap := dfid[order[j - 1]], snap[order[j - 1]]
+
+		if nextDFID + 1 != currDFID || nextSnap <= currSnap { return j }
+	}
+	panic("Impossible")
 }
 
 // WriteTracks writes a given set of tracks to the given output file. The
