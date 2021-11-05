@@ -6,7 +6,6 @@ import (
 	"runtime"
 
 	"research/lmc_ges_tracking/lib"
-	"github.com/phil-mansfield/guppy/lib/catio"
 )
 
 var (
@@ -37,7 +36,7 @@ func main() {
 
 	// Loop over different tree files
 	for i := range TreeFileNames {
-		rd := catio.TextFile(TreeFileNames[i])
+		rd := lib.TextFile(TreeFileNames[i])
 
 		// If the tree files are too large to load into memory at once,
 		// break it up and read each block separately.
