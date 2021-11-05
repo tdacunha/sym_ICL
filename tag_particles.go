@@ -18,10 +18,9 @@ var (
 	NHaloes = 3
 	HRLevel = 1
 	
-	SnapshotFormat = "path/to/snapshot%d.%d"
-	TrackFileName = "track/file/name"
-
-	OutputFormat = "path/to/output/format.%d"
+	SnapshotFormat = "/scratch/users/enadler/Halo416/output/snapshot_%03d.%d"
+	TrackFileName = "/scratch/users/phil1/lmc_ges_tracking/Halo416/halo_tracks.txt"
+	OutputFormat = "/scratch/users/phil1/lmc_ges_tracking/Halo416/ids.%d"
 )
 
 // HaloTrack contains the evolution history of a single halo.
@@ -42,16 +41,17 @@ func main() {
 			xp, _, idp := ReadLevel(fileName, HRLevel)
 
 			AddIDs(ids, tracks, snap, xp, idp)
+			fmt.Println(snap, len(ids[0]), len(ids[1]), len(ids[2]))
 		}
 	}
 	
 	WriteIDs(ids)
 }
 
-func InitIDs(n int) []map[int32]bool {
-	out := make([]map[int32]bool, n)
+func InitIDs(n int) []map[int32]int {
+	out := make([]map[int32]int, n)
 	for i := range out {
-		out[i] = map[int32]bool{ }
+		out[i] = map[int32]int{ }
 	}
 	return out
 }
@@ -60,7 +60,7 @@ func ReadTracks(fileName string, n int) []HaloTrack {
 	f := catio.TextFile(fileName)
 	
 	idxs := make([]int, n*4)
-	for i := range idxs { idxs[i] = i+1 }
+	for i := range idxs { idxs[i] = i }
 	cols := f.ReadFloat32s(idxs)
 
 	out := make([]HaloTrack, n)
@@ -89,7 +89,7 @@ func ReadLevel(fileName string, level int) (xp, vp [][3]float32, idp []int32) {
 }
 
 func AddIDs(
-	ids []map[int32]bool, tracks []HaloTrack, snap int,
+	ids []map[int32]int, tracks []HaloTrack, snap int,
 	xp [][3]float32, idp []int32,
 ) {
 	r2, x := make([]float32, len(tracks)), make([][3]float32, len(tracks))
@@ -102,25 +102,20 @@ func AddIDs(
 	
 	for j := range xp {
 		for i := range tracks {
-			if _, ok := ids[i][idp[j]]; ok { break }
-			
+			if tracks[i].Rvir[snap] < 0 { continue }
+
+			id := idp[j]
 			dr2 := DR2(xp[j], x[i])
+
 			if dr2 <= r2[i] {
-				AddID(ids, i, idp[j])
-				RemoveIDs(ids, i, idp[j])
+				if _, ok := ids[i][id]; !ok {
+					ids[i][id] = snap
+				}
+				break
+			} else if _, ok := ids[i][id]; ok {
 				break
 			}
 		}
-	}
-}
-
-func AddID(ids []map[int32]bool, i int, id int32) {
-	ids[i][id] = true
-}
-
-func RemoveIDs(ids []map[int32]bool, i int, id int32) {
-	for j := i+1; j < len(ids); j++ {
-		delete(ids[j], id)
 	}
 }
 
@@ -133,7 +128,7 @@ func DR2(x1, x2 [3]float32) float32 {
 	return dr2
 }
 
-func WriteIDs(ids []map[int32]bool) {
+func WriteIDs(ids []map[int32]int) {
 	for i := range ids {
 		fileName := fmt.Sprintf(OutputFormat, i)
 
@@ -141,11 +136,17 @@ func WriteIDs(ids []map[int32]bool) {
 		if err != nil { panic(err.Error()) }
 
 		idSlice := []int32{ }
-		for id, _ := range ids[i] { idSlice = append(idSlice, id) }
+		snapSlice := []int16{ }
+		for id, snap := range ids[i] {
+			idSlice = append(idSlice, id)
+			snapSlice = append(snapSlice, int16(snap))
+		}
 		
 		err = binary.Write(f, binary.LittleEndian, int32(len(idSlice)))
 		if err != nil { panic(err.Error()) }
 		err = binary.Write(f, binary.LittleEndian, idSlice)
+		if err != nil { panic(err.Error()) }
+		err = binary.Write(f, binary.LittleEndian, snapSlice)
 		if err != nil { panic(err.Error()) }
 
 		f.Close()
