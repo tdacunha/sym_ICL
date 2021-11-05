@@ -7,13 +7,14 @@ import (
 	"runtime"
 
 	"research/lmc_ges_tracking/lib"
+	"github.com/phil-mansfield/guppy/lib/catio"
 )
 
 var (
 	MaxSnap = 235
 	TreeFileNames = []string{ "/scratch/users/enadler/Halo416/rockstar/trees/tree_0_0_0.dat" }
 	CentralID = 9285216
-	SubhaloIDs = []int{ 9278166, 9285216 }
+	SubhaloIDs = []int{ 9278166, 7540210 }
 	
 	HaloIDs = append([]int{CentralID}, SubhaloIDs...)
 
@@ -23,7 +24,7 @@ var (
 // Haloes is a collection of raw columns from the tree.dat files.
 type Haloes struct {
 	ID, DFID, Snap []int
-	Rvir, X, Y, Z []float32
+	X, Y, Z, Rvir []float32
 }
 
 // HaloTrack contains the evolution history of a single halo.
@@ -36,11 +37,10 @@ func main() {
 	tracks := []HaloTrack{ }
 
 	cfg := catio.DefaultConfig
-	cfg.SkipLines = 46
+	cfg.SkipLines = 45
 
 	// Loop over different tree files
 	for i := range TreeFileNames {
-		log.Println("Reading", TreeFileNames[i])
 		rd := catio.TextFile(TreeFileNames[i], cfg)
 
 		// If the tree files are too large to load into memory at once,
@@ -49,24 +49,20 @@ func main() {
 			runtime.GC()
 
 			// Read the columns
-			log.Printf("Read ints for block %d", b)
 			iCols := rd.ReadIntBlock([]int{1, 28, 31}, b)
 			id, dfid, snap := iCols[0], iCols[1], iCols[2]
 			
-			log.Printf("Read ints for block %d", b)
 			fCols := rd.ReadFloat32Block([]int{11, 17, 18, 19}, b)
 			rvir, x, y, z := fCols[0], fCols[1], fCols[2], fCols[3]
 
 			h := &Haloes{ id, dfid, snap, x, y, z, rvir }
 
-			log.Println("Getting tracks")
 			// Find tracks from the currently-read block
 			tracks = append(tracks, GetTracks(h, HaloIDs)...)
 		}
 	}
 
-	log.Println("Writing")
-	WriteTracks(tracks, CentralID, OutputFileName)
+	WriteTracks(tracks, HaloIDs, OutputFileName)
 }
 
 // GetTracks returns all the tracks for haloes whose roots are within rootIDs.
@@ -74,14 +70,12 @@ func GetTracks(h *Haloes, haloIDs []int) []HaloTrack {
 	tracks := []HaloTrack{ }
 
 	order := IDOrder(h.DFID)
-	log.Println("Finished sorting")
 
 	for j := range order {
 		i := order[j]
 
 		for k := range haloIDs {
-			if h.DFID[i] == haloIDs[k] {
-				log.Println("Finished halo track", k)
+			if h.ID[i] == haloIDs[k] {
 				tracks = append(tracks, GetSingleTrack(h, order, j))
 			}
 		}
@@ -126,7 +120,7 @@ func GetSingleTrack(h *Haloes, order []int, j0 int) HaloTrack {
 
 		track.Z[snap] = h.Z[i]
 		track.Y[snap] = h.Y[i]
-		track.Z[snap] = h.Z[i]
+		track.X[snap] = h.X[i]
 		track.Rvir[snap] = h.Rvir[i]
 	}
 
@@ -161,17 +155,10 @@ func FirstBranchIndex(dfid, snap, order []int, j0 int) int {
 
 // WriteTracks writes a given set of tracks to the given output file. The
 // central is written first.
-func WriteTracks(tracks []HaloTrack, centralRootID int, fileName string) {
+func WriteTracks(tracks []HaloTrack, ids []int, fileName string) {
 	f, err := os.Create(fileName)
 	if err != nil { panic(err.Error()) }
 	defer f.Close()
-	
-	// Find the index of the central. I think it will always be zero.
-	var iCentral int
-	for iCentral = 0; iCentral < len(tracks); iCentral++ {
-		if tracks[iCentral].RootID == centralRootID { break }
-	}
-
 
 	fmt.Fprintf(f, 
 `# This file contains the evolutionary tracks of a central halo  and several of
@@ -180,20 +167,20 @@ func WriteTracks(tracks []HaloTrack, centralRootID int, fileName string) {
 # different halo during that snapshot. The first set of four columns belong to
 # the central and each subsequent group of four is another subhalo. All values
 # are given in comoving Mpc/h and are set to -1 in snapshots where the subhalo
-# does not exist.\n`)
+# does not exist.
+`)
+	
 	
 	for snap := 0; snap <= MaxSnap; snap++ {
-		c := tracks[iCentral]
-		fmt.Fprintf(f, "%3d ", snap)
-		fmt.Fprintf(f, "%8.5f %8.5f %8.5f %7.5f ",
-			c.X[snap], c.Y[snap], c.Z[snap], c.Rvir[snap])
-		
-		for i := range tracks {
-			if i == iCentral { continue }
+		for j := range ids {
+			i := 0
+			for ; i < len(tracks); i++ {
+				if ids[j] == tracks[i].RootID { break }
+			}
 
 			s := tracks[i]
 			fmt.Fprintf(f, "%8.5f %8.5f %8.5f %7.5f ",
-				s.X[snap], s.Y[snap], s.Z[snap], s.Rvir[snap])
+				s.X[snap], s.Y[snap], s.Z[snap], s.Rvir[snap]/1e3)
 		}
 		
 		fmt.Fprintf(f, "\n")
