@@ -7,7 +7,6 @@ import (
 	"runtime"
 
 	"research/lmc_ges_tracking/lib"
-	"github.com/phil-mansfield/guppy/lib/catio"
 )
 
 var (

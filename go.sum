@@ -18,8 +18,8 @@ github.com/jung-kurt/gofpdf v1.0.0/go.mod h1:7Id9E/uU8ce6rXgefFLlgrJj/GYY22cpxn+
 github.com/jung-kurt/gofpdf v1.0.3-0.20190309125859-24315acbbda5/go.mod h1:7Id9E/uU8ce6rXgefFLlgrJj/GYY22cpxn+r32jIOes=
 github.com/phil-mansfield/gotetra v0.0.0-20200929220940-e55459c21bdf/go.mod h1:ZmHLTRkkGNqc6uoF3LKphe2b3NVSEGVAY4JFQ9RvwMY=
 github.com/phil-mansfield/gravitree v1.0.0/go.mod h1:DE7L63zZeR4pqVjmV0u+r1RdPqlNrWlwLwFshhSeALk=
-github.com/phil-mansfield/guppy v0.0.0-20210930172216-d44aadaeca55 h1:RMEiySNzOUVXNUnW9PsQZqehp03FxM5ysXixZJvt9oo=
-github.com/phil-mansfield/guppy v0.0.0-20210930172216-d44aadaeca55/go.mod h1:rButpVUOCAuPiLnuC+mamZOj0C119X3farXgIkQOGhU=
+github.com/phil-mansfield/guppy v0.0.0-20211105040419-780694eed55f h1:KUM+qyDxd4RcjPC93/PDIQg1MV8WQO383LH2Vv6Fn10=
+github.com/phil-mansfield/guppy v0.0.0-20211105040419-780694eed55f/go.mod h1:UDm2G2Bzx8ikvos+/UZbAnf0tnQPfOshpa/9OU3earU=
 github.com/phil-mansfield/read_gadget v0.0.0-20211104221035-e7bf000a5b6a h1:HD5sG4MQTdwRe73qWjz/YxLJuIvGCPTXsbQaqvl2LPI=
 github.com/phil-mansfield/read_gadget v0.0.0-20211104221035-e7bf000a5b6a/go.mod h1:gLxUOLrDh2x7ktz2wegQwUNVVuF14MRJa3//xamO/2k=
 github.com/phpdave11/gofpdf v1.4.2/go.mod h1:zpO6xFn9yxo3YLyMvW8HcKWVdbNqgIfOOp2dXMnm1mY=
@@ -54,6 +54,7 @@ golang.org/x/sys v0.0.0-20190215142949-d0b11bdaac8a/go.mod h1:STP8DvDyc/dI5b8T5h
 golang.org/x/sys v0.0.0-20190312061237-fead79001313/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/sys v0.0.0-20190412213103-97732733099d/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/sys v0.0.0-20210304124612-50617c2ba197/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+golang.org/x/sys v0.0.0-20211006194710-c8a6f5223071/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/text v0.3.0/go.mod h1:NqM8EUOU14njkJ3fqMW+pc6Ldnwhi/IjpwHt7yyuwOQ=
 golang.org/x/text v0.3.5/go.mod h1:5Zoc/QRtKVWzQhOtBMvqHzDpF6irO9z98xDceosuGiQ=
 golang.org/x/tools v0.0.0-20180525024113-a5b4c53f6e8b/go.mod h1:n7NCudcB/nEzxVGmLbDWY5pfWTLqBcC2KZ6jyYvM4mQ=
