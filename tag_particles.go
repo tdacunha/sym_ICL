@@ -3,13 +3,12 @@ package main
 import (
 	"encoding/binary"
 	"fmt"
+	"log"
 	"os"
 	"runtime"
+	"time"
 
-	"github.com/phil-mansfield/guppy/lib/catio"
-	"github.com/phil-mansfield/read_gadget"
-
-	//"research/lmc_ges_tracking/lib"
+	"github.com/phil-mansfield/lmc_ges_tracking/lib"
 )
 
 var (
@@ -34,17 +33,28 @@ func main() {
 	tracks := ReadTracks(TrackFileName, NHaloes)
 
 	for snap := 0; snap <= MaxSnap; snap++ {
+		fmt.Println("tag", snap)
 		runtime.GC()
 		
+		dtRead := 0.0
+		dtAdd := 0.0
+
 		for b := 0; b < Blocks; b++ {
 			fileName := fmt.Sprintf(SnapshotFormat, snap, b)
-			xp, _, idp := ReadLevel(fileName, HRLevel)
-
+			t1 := time.Now()
+			xp, idp := ReadLevel(fileName, HRLevel)
+			t2 := time.Now()
 			AddIDs(ids, tracks, snap, xp, idp)
-			fmt.Println(snap, len(ids[0]), len(ids[1]), len(ids[2]))
+			t3 := time.Now()
+
+			dtAdd += t3.Sub(t2).Seconds()
+			dtRead += t2.Sub(t1).Seconds()
 		}
+		log.Printf("%3d %7d %7d %7d\n", 
+			snap, len(ids[0]), len(ids[1]), len(ids[2]))
+		log.Printf("%5.3f %5.3f\n", dtRead, dtAdd)
 	}
-	
+
 	WriteIDs(ids)
 }
 
@@ -57,35 +67,34 @@ func InitIDs(n int) []map[int32]int {
 }
 
 func ReadTracks(fileName string, n int) []HaloTrack {
-	f := catio.TextFile(fileName)
+	fmt.Println(fileName, n)
+	f := lib.TextFile(fileName)
 	
-	idxs := make([]int, n*4)
+	idxs := make([]int, n*7)
 	for i := range idxs { idxs[i] = i }
 	cols := f.ReadFloat32s(idxs)
 
 	out := make([]HaloTrack, n)
 
 	for i := range out {
-		out[i].X = cols[4*i]
-		out[i].Y = cols[4*i+1]
-		out[i].Z = cols[4*i+2]
-		out[i].Rvir = cols[4*i+3]
+		out[i].X = cols[7*i]
+		out[i].Y = cols[7*i+1]
+		out[i].Z = cols[7*i+2]
+		out[i].Rvir = cols[7*i+6]
 	}
 
 	return out
 }
 
-func ReadLevel(fileName string, level int) (xp, vp [][3]float32, idp []int32) {
-	f := read_gadget.OpenGadget2Zoom(fileName, []string{"x", "v", "id32"})
+func ReadLevel(fileName string, level int) (xp [][3]float32, idp []int32) {
+	f := lib.OpenGadget2Zoom(fileName, []string{"x", "v", "id32"})
 	xp = make([][3]float32, f.N[level])
-	vp = make([][3]float32, f.N[level])
 	idp = make([]int32, f.N[level])
 
 	f.Read("x", level, xp)
-	f.Read("v", level, vp)
 	f.Read("id32", level, idp)
 
-	return xp, vp, idp
+	return xp, idp
 }
 
 func AddIDs(
@@ -99,8 +108,14 @@ func AddIDs(
 			tracks[i].X[snap], tracks[i].Y[snap], tracks[i].Z[snap],
 		}
 	}
-	
+
+ParticleLoop:	
 	for j := range xp {
+		for i := range tracks {
+			if _, ok := ids[i][idp[j]]; ok {
+				continue ParticleLoop
+			}
+		}
 		for i := range tracks {
 			if tracks[i].Rvir[snap] < 0 { continue }
 
@@ -108,11 +123,7 @@ func AddIDs(
 			dr2 := DR2(xp[j], x[i])
 
 			if dr2 <= r2[i] {
-				if _, ok := ids[i][id]; !ok {
-					ids[i][id] = snap
-				}
-				break
-			} else if _, ok := ids[i][id]; ok {
+				ids[i][id] = snap
 				break
 			}
 		}
@@ -129,9 +140,8 @@ func DR2(x1, x2 [3]float32) float32 {
 }
 
 func WriteIDs(ids []map[int32]int) {
-	for i := range ids {
+	for i := 0; i < len(ids); i++ {
 		fileName := fmt.Sprintf(OutputFormat, i)
-
 		f, err := os.Create(fileName)
 		if err != nil { panic(err.Error()) }
 
@@ -141,7 +151,7 @@ func WriteIDs(ids []map[int32]int) {
 			idSlice = append(idSlice, id)
 			snapSlice = append(snapSlice, int16(snap))
 		}
-		
+
 		err = binary.Write(f, binary.LittleEndian, int32(len(idSlice)))
 		if err != nil { panic(err.Error()) }
 		err = binary.Write(f, binary.LittleEndian, idSlice)

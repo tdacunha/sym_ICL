@@ -5,7 +5,7 @@ import (
 	"os"
 	"runtime"
 
-	"research/lmc_ges_tracking/lib"
+	"github.com/phil-mansfield/lmc_ges_tracking/lib"
 	"github.com/phil-mansfield/guppy/lib/catio"
 )
 
@@ -23,13 +23,13 @@ var (
 // Haloes is a collection of raw columns from the tree.dat files.
 type Haloes struct {
 	ID, DFID, Snap []int
-	X, Y, Z, Rvir []float32
+	X, Y, Z, VX, VY, VZ, Rvir []float32
 }
 
 // HaloTrack contains the evolution history of a single halo.
 type HaloTrack struct {
 	RootID int
-	X, Y, Z, Rvir []float32
+	X, Y, Z, VX, VY, VZ, Rvir []float32
 }
 
 func main() {
@@ -51,10 +51,12 @@ func main() {
 			iCols := rd.ReadIntBlock([]int{1, 28, 31}, b)
 			id, dfid, snap := iCols[0], iCols[1], iCols[2]
 			
-			fCols := rd.ReadFloat32Block([]int{11, 17, 18, 19}, b)
-			rvir, x, y, z := fCols[0], fCols[1], fCols[2], fCols[3]
+			fCols := rd.ReadFloat32Block([]int{11, 17, 18, 19, 20, 21, 22}, b)
+			rvir, x, y, z, vx, vy, vz := 
+				fCols[0], fCols[1], fCols[2], fCols[3],
+				fCols[4], fCols[5], fCols[6]
 
-			h := &Haloes{ id, dfid, snap, x, y, z, rvir }
+			h := &Haloes{ id, dfid, snap, x, y, z, vx, vy, vz, rvir }
 
 			// Find tracks from the currently-read block
 			tracks = append(tracks, GetTracks(h, HaloIDs)...)
@@ -102,12 +104,15 @@ func GetSingleTrack(h *Haloes, order []int, j0 int) HaloTrack {
 	n := MaxSnap + 1
 	rootID := h.ID[order[j0]]
 	track := HaloTrack{
-		rootID, make([]float32, n), make([]float32, n),
+		rootID, make([]float32, n),
+		make([]float32, n), make([]float32, n),
+		make([]float32, n), make([]float32, n),
 		make([]float32, n), make([]float32, n),
 	}
 	
 	for i := range track.X {
 		track.X[i], track.Y[i], track.Z[i], track.Rvir[i] = -1, -1, -1, -1
+		track.VX[i], track.VY[i], track.VZ[i] = -1, -1, -1
 	}
 	
 	jStart := FirstBranchIndex(h.DFID, h.Snap, order, j0)
@@ -120,6 +125,9 @@ func GetSingleTrack(h *Haloes, order []int, j0 int) HaloTrack {
 		track.Z[snap] = h.Z[i]
 		track.Y[snap] = h.Y[i]
 		track.X[snap] = h.X[i]
+		track.VZ[snap] = h.VZ[i]
+		track.VY[snap] = h.VY[i]
+		track.VX[snap] = h.VX[i]
 		track.Rvir[snap] = h.Rvir[i]
 	}
 
@@ -178,8 +186,10 @@ func WriteTracks(tracks []HaloTrack, ids []int, fileName string) {
 			}
 
 			s := tracks[i]
-			fmt.Fprintf(f, "%8.5f %8.5f %8.5f %7.5f ",
-				s.X[snap], s.Y[snap], s.Z[snap], s.Rvir[snap]/1e3)
+			fmt.Fprintf(f, "%8.5f %8.5f %8.5f %8.2f %8.2f %8.2f %7.5f ",
+				s.X[snap], s.Y[snap], s.Z[snap],
+				s.VX[snap], s.VY[snap], s.VZ[snap],
+				s.Rvir[snap]/1e3)
 		}
 		
 		fmt.Fprintf(f, "\n")

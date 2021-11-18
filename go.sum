@@ -17,11 +17,12 @@ github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0/go.mod h1:E/TSTwGw
 github.com/jung-kurt/gofpdf v1.0.0/go.mod h1:7Id9E/uU8ce6rXgefFLlgrJj/GYY22cpxn+r32jIOes=
 github.com/jung-kurt/gofpdf v1.0.3-0.20190309125859-24315acbbda5/go.mod h1:7Id9E/uU8ce6rXgefFLlgrJj/GYY22cpxn+r32jIOes=
 github.com/phil-mansfield/gotetra v0.0.0-20200929220940-e55459c21bdf/go.mod h1:ZmHLTRkkGNqc6uoF3LKphe2b3NVSEGVAY4JFQ9RvwMY=
+github.com/phil-mansfield/gravitree v1.0.0 h1:yAOwzlA29qRcUMNEn3akk8jmKfFFaKBlf9y3+cE32zo=
 github.com/phil-mansfield/gravitree v1.0.0/go.mod h1:DE7L63zZeR4pqVjmV0u+r1RdPqlNrWlwLwFshhSeALk=
+github.com/phil-mansfield/gravitree v1.0.1 h1:LE0p63lCKxxaIM3IhG+G4isNUxFjMgTwvwxOmCDM0ys=
+github.com/phil-mansfield/gravitree v1.0.1/go.mod h1:YK1w+rBRlt1ByfgWNvBwyHHSsDohsglfqJlgKGG8m+M=
 github.com/phil-mansfield/guppy v0.0.0-20211105040419-780694eed55f h1:KUM+qyDxd4RcjPC93/PDIQg1MV8WQO383LH2Vv6Fn10=
 github.com/phil-mansfield/guppy v0.0.0-20211105040419-780694eed55f/go.mod h1:UDm2G2Bzx8ikvos+/UZbAnf0tnQPfOshpa/9OU3earU=
-github.com/phil-mansfield/read_gadget v0.0.0-20211104221035-e7bf000a5b6a h1:HD5sG4MQTdwRe73qWjz/YxLJuIvGCPTXsbQaqvl2LPI=
-github.com/phil-mansfield/read_gadget v0.0.0-20211104221035-e7bf000a5b6a/go.mod h1:gLxUOLrDh2x7ktz2wegQwUNVVuF14MRJa3//xamO/2k=
 github.com/phpdave11/gofpdf v1.4.2/go.mod h1:zpO6xFn9yxo3YLyMvW8HcKWVdbNqgIfOOp2dXMnm1mY=
 github.com/phpdave11/gofpdi v1.0.12/go.mod h1:vBmVV0Do6hSBHC8uKUQ71JGW+ZGQq74llk/7bXwjDoI=
 github.com/pkg/errors v0.8.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=

@@ -1,8 +1,8 @@
-module research/lmc_ges_tracking
+module github.com/phil-mansfield/lmc_ges_tracking
 
-go 1.16
+go 1.14
 
 require (
+	github.com/phil-mansfield/gravitree v1.0.1
 	github.com/phil-mansfield/guppy v0.0.0-20211105040419-780694eed55f
-	github.com/phil-mansfield/read_gadget v0.0.0-20211104221035-e7bf000a5b6a
 )
