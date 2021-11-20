@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"os"
+	"log"
 	
 	"github.com/phil-mansfield/guppy/lib/catio"
 )
@@ -14,16 +15,20 @@ var (
 )
 
 func main() {
+	log.Println("Starting")
 	cfg := catio.DefaultConfig
 	cfg.SkipLines = 45
 	rd := catio.TextFile(TreeFileName, cfg)
 	
+	log.Println("Reading")
 	cols := rd.ReadInts([]int{ 1, 3, 6, 28, 31 })
 	id, descid, upid, dfid, snap := cols[0], cols[1], cols[2], cols[3], cols[4]
 	
 	mvir := rd.ReadFloat64s([]int{ 10 })[0]
 
+	log.Println("Writing")
 	Write(id, descid, upid, dfid, snap, mvir)
+	log.Println("Done")
 }
 
 func Write(id, descid, upid, dfid, snap []int, mvir []float64) {
