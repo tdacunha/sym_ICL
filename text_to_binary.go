@@ -49,8 +49,10 @@ func Write(id, descid, upid, dfid, snap []int, mvir []float64) {
 	f, err := os.Create(OutFileName)
 	defer f.Close()
 	if err != nil { panic(err.Error()) }
-
+	
 	order := binary.LittleEndian
+	err = binary.Write(f, order, int32(n))
+	if err != nil { panic(err.Error()) }
 	err = binary.Write(f, order, id32)
 	if err != nil { panic(err.Error()) }
 	err = binary.Write(f, order, descid32)
