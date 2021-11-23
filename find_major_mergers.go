@@ -1,0 +1,332 @@
+package main
+
+import (
+	"fmt"
+	"sort"
+	"runtime"
+	"os"
+	"encoding/binary"
+	"io/ioutil"
+	"strings"
+	"strconv"
+	
+	"github.com/phil-mansfield/lmc_ges_tracking/lib"
+	"github.com/phil-mansfield/guppy/lib/catio"
+)
+
+var (
+	MaxSnap = int32(235)
+	TreeFileName="/scratch/users/enadler/Halo416/rockstar/trees/tree_0_0_0.dat"
+	OutputFileName="/scratch/users/phil1/lmc_ges_tracking/Halo416/sub_info.dat"
+)
+
+// Haloes is a collection of raw columns from the tree.dat files.
+type Haloes struct {
+	ID, DescID, UPID, DFID, Snap []int32
+	Mvir, Vmax []float32
+	X, V [][3]float32
+	IDTable *LookupTable
+}
+
+type LookupTable struct {
+	Order, ID []int32
+}
+
+func NewLookupTable(id []int32) *LookupTable {
+	order := IDOrder(id)
+	return &LookupTable{ order, id }
+}
+
+func (t *LookupTable) Find(id int32) int32 {
+	j := sort.Search(len(t.ID), func (j int) bool {
+		return t.ID[t.Order[j]] >= id
+	})
+	return t.Order[j]
+}
+
+// HaloTrack contains the evolution history of a single halo.
+func main() {	
+	inputName := os.Args[1]
+	treeFileNames, outFileNames, mwIDs := ParseInputFile(inputName)
+	
+	cfg := catio.DefaultConfig
+	cfg.SkipLines = 45
+
+	for i := range treeFileNames {
+		rd := catio.TextFile(treeFileNames[i], cfg)
+		
+		// Read the columns
+		cols := rd.ReadInts([]int{ 1, 3, 6, 28, 31 })
+		id, descid, upid, dfid, snap := cols[0], cols[1],
+			cols[2], cols[3],cols[4]
+		fcols := rd.ReadFloat32s([]int{ 10, 16, 17, 18, 19, 20, 21, 22})
+		mvir, vmax, x, y, z, vx, vy, vz := fcols[0], fcols[1],
+			fcols[2], fcols[3], fcols[4], fcols[5], fcols[6], fcols[7]
+		h := &Haloes{ ID: ToInt32(id), DescID: ToInt32(descid),
+			UPID: ToInt32(upid), DFID: ToInt32(dfid), Snap: ToInt32(snap),
+			Mvir: mvir, Vmax: vmax,
+			X: ToVector(x, y, z), V: ToVector(vx, vy, vz) }
+		
+		runtime.GC()
+		SortHaloes(h)
+		runtime.GC()
+		t := CalcTracks(h, mwIDs[i])
+		mergers := MajorMergers(t, 10)		
+		WriteMergers(outFileNames[i], h, t, mergers, int(mwIDs[i]))
+		runtime.GC()
+	}
+}
+
+func ToInt32(x []int) []int32 {
+	out := make([]int32, len(x))
+	for i := range x {
+		out[i] = int32(x[i])
+	}
+
+	return out
+}
+
+func ToVector(x, y, z []float32) [][3]float32 {
+	out := make([][3]float32, len(x))
+	for i := range out {
+		out[i] = [3]float32{ x[i], y[i], z[i] }
+	}
+	return out
+}
+
+func ReorderInts(x, order []int32) []int32 {
+	out := make([]int32, len(order))
+	for i := range out {
+		out[i] = x[order[i]]
+	}
+	return out
+}
+
+func ReorderFloats(x []float32, order []int32) []float32 {
+	out := make([]float32, len(order))
+	for i := range out {
+		out[i] = x[order[i]]
+	}
+	return out
+}
+
+func ReorderVectors(x [][3]float32, order []int32) [][3]float32 {
+	out := make([][3]float32, len(order))
+	for i := range out {
+		out[i] = x[order[i]]
+	}
+	return out
+}
+
+func SortHaloes(h *Haloes) {
+	order := IDOrder(h.DFID)
+	h.ID = ReorderInts(h.ID, order)
+	h.DescID = ReorderInts(h.DescID, order)
+	h.UPID = ReorderInts(h.UPID, order)
+	h.DFID = ReorderInts(h.DFID, order)
+	h.Snap = ReorderInts(h.Snap, order)
+	h.Mvir = ReorderFloats(h.Mvir, order)
+	h.Vmax = ReorderFloats(h.Vmax, order)
+	h.X = ReorderVectors(h.X, order)
+	h.V = ReorderVectors(h.V, order)
+	h.IDTable = NewLookupTable(h.ID)
+}
+
+type Tracks struct {
+	N int
+	Starts, Ends []int32
+	IsReal, IsMWSub []bool
+	MpeakInfall []float32
+}
+
+func CalcTracks(h *Haloes, mwID int32) *Tracks {
+	t := &Tracks{ }
+	
+	t.Starts, t.Ends = StartsEnds(h)
+	t.N = len(t.Starts)
+	
+	t.IsReal = IsReal(h, t)
+	t.IsMWSub = IsMWSub(h, t, mwID)
+	
+	return t
+}
+
+func StartsEnds(h *Haloes) (starts, ends []int32) {
+	starts, ends = []int32{ 0 }, []int32{ }
+	for i := 0; i < len(h.DFID) - 1; i++ {
+		if h.DescID[i+1] != h.ID[i] {
+			starts = append(starts, int32(i+1))
+			ends = append(ends, int32(i+1))
+		}
+	}
+	ends = append(ends, int32(len(h.DFID)))
+
+	return starts, ends
+}
+
+func IsReal(h *Haloes, t *Tracks) []bool {
+	isReal := make([]bool, t.N)
+	for i := range isReal {
+		isReal[i] = h.UPID[t.Ends[i] - 1] == -1
+	}
+	return isReal
+}
+
+func IsMWSub(h *Haloes, t *Tracks, mwID int32) []bool {
+	mwIdx := 0
+	for ; mwIdx < t.N && h.ID[t.Starts[mwIdx]] != mwID; mwIdx++ {
+	}
+
+	if mwIdx == t.N {
+		panic(fmt.Sprintf("Could not find a z=0 halo with ID %d", mwID))
+	}
+
+	
+	minID, maxID := h.DFID[t.Starts[mwIdx]], h.DFID[t.Ends[mwIdx] - 1]
+	
+	out := make([]bool, t.N)
+	for i := range out {
+		start, end := t.Starts[i], t.Ends[i]
+		for j := start; j < end; j++ {
+			if h.UPID[j] != -1 {
+				k := h.IDTable.Find(h.UPID[j])
+				out[i] = h.DFID[k] >= minID && h.DFID[k] <= maxID
+			}
+		}
+	}
+
+	return out
+}
+
+func MpeakInfall(h *Haloes, t *Tracks) []float32 {
+	out := make([]float32, t.N)
+	for i := range out {
+		for j := t.Ends[i]+1; j >= t.Starts[i] && h.UPID[j] == -1; j-- {
+			if h.Mvir[j] > out[i] { out[i] = h.Mvir[j] }
+		}
+	}
+
+	return out
+}
+
+func MajorMergers(t *Tracks, n int) []int {
+	idx := []int{ }
+	mpeak := []float64{ }
+
+	for i := 0; i < t.N; i++ {
+		if t.IsMWSub[i] {
+			idx = append(idx, i)
+			mpeak = append(mpeak, float64(t.MpeakInfall[i]))
+		}
+	}
+
+	order := lib.QuickSortIndex(mpeak)
+
+	mergers := []int{ }
+	for i := len(order) - 1; i > len(order) - 1 - n; i-- {
+		mergers = append(mergers, idx[order[i]])
+	}
+
+	return mergers
+}
+
+func IDOrder(id []int32) []int32 {
+	fid := make([]float64, len(id))
+	for i := range id {
+		fid[i] = float64(id[i])
+	}
+
+	idx := lib.QuickSortIndex(fid)
+	idx32 := make([]int32, len(idx))
+	for i := range idx32 { idx32[i] = int32(idx[i]) }
+	
+	return idx32
+}
+
+func WriteMergers(fname string, h *Haloes, t *Tracks, mergers []int, iMW int) {
+	f, err := os.Create(fname)
+	if err != nil { panic(err.Error()) }
+	defer f.Close()
+
+	order := binary.LittleEndian
+	err = binary.Write(f, order, int64(len(mergers)))
+	if err != nil { panic(err.Error()) }
+	err = binary.Write(f, order, int64(MaxSnap))
+	if err != nil { panic(err.Error()) }
+	
+	WriteHalo(f, h, t, iMW)
+	for i := range mergers {
+		WriteHalo(f, h, t, mergers[i])
+	}
+}
+
+func WriteHalo(f *os.File, h *Haloes, t *Tracks, i int) {
+	id := make([]int32, MaxSnap+1)
+	mvir := make([]float32, MaxSnap+1)
+	vmax := make([]float32, MaxSnap+1)
+	x := make([][3]float32, MaxSnap+1)
+	v := make([][3]float32, MaxSnap+1)
+
+	for i := t.Starts[i]; i < t.Ends[i]; i++ {
+		s := h.Snap[i]
+		id[s] = h.ID[i]
+		mvir[s] = h.Mvir[i]
+		vmax[s] = h.Vmax[i]
+		x[s] = h.X[i]
+		v[s] = h.V[i]
+	}
+
+	order := binary.LittleEndian
+	err := binary.Write(f, order, id)
+	if err != nil { panic(err.Error()) }
+	err = binary.Write(f, order, mvir)
+	if err != nil { panic(err.Error()) }
+	err = binary.Write(f, order, vmax)
+	if err != nil { panic(err.Error()) }
+	err = binary.Write(f, order, x)
+	if err != nil { panic(err.Error()) }
+	err = binary.Write(f, order, v)
+	if err != nil { panic(err.Error()) }
+}
+
+func ParseInputFile(fname string) ([]string, []string, []int32) {
+	b, err := ioutil.ReadFile(fname)
+	if err != nil {
+		panic(fmt.Sprintf("Could not open input file: %s", err.Error()))
+	}
+	s := string(b)
+
+	trees, outs, mwIDs := []string{ }, []string{ }, []int32{ }
+	
+	lines := strings.Split(s, "\n")
+	for i := range lines {
+		line := strings.Trim(lines[i], " ")
+		if len(line) == 0 { continue }
+
+		tok := strings.Split(lines[i], " ")
+		cols := []string{ }
+		for i := range tok {
+			if len(tok[i]) > 0 {
+				cols = append(cols, tok[i])
+			}
+		}
+
+		fmt.Println(tok, len(tok), cols, len(cols))
+		
+		if len(cols) != 3 {
+			panic(fmt.Sprintf("Line %d of %s is '%s', but you need there " +
+				"to be three columns.", i+1, fname, line))
+		}
+		
+		trees = append(trees, cols[0])
+		outs = append(outs, cols[1])
+		mwID, err := strconv.Atoi(cols[2])
+		if err != nil {
+			panic(fmt.Sprintf("Could not parse the ID on line %d of " +
+				"%s: %s", i+1, fname, cols[2]))
+		}
+		mwIDs = append(mwIDs, int32(mwID))
+	}
+	
+	return trees, outs, mwIDs
+}
