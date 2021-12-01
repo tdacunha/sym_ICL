@@ -88,6 +88,7 @@ func ReadTracks(fileName string, n int) []HaloTrack {
 
 func ReadLevel(fileName string, level int) (xp [][3]float32, idp []int32) {
 	f := lib.OpenGadget2Zoom(fileName, []string{"x", "v", "id32"})
+
 	xp = make([][3]float32, f.N[level])
 	idp = make([]int32, f.N[level])
 

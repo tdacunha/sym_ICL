@@ -39,7 +39,7 @@ func Write(id, descid, upid, dfid, snap []int, mvir []float64) {
 	for i := range id32 {
 		id32[i], descid32[i] = int32(id[i]), int32(descid[i])
 		upid32[i] = int32(upid[i])
-		dfid32[i], snap32[i] = int32(dfid[i]), int32(snap32[i])
+		dfid32[i], snap32[i] = int32(dfid[i]), int32(snap[i])
 
 		if id[i] > maxID {
 			maxID = id[i]

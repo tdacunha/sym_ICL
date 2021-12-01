@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"strings"
 	"strconv"
+	"log"
 	
 	"github.com/phil-mansfield/lmc_ges_tracking/lib"
 	"github.com/phil-mansfield/guppy/lib/catio"
@@ -16,8 +17,7 @@ import (
 
 var (
 	MaxSnap = int32(235)
-	TreeFileName="/scratch/users/enadler/Halo416/rockstar/trees/tree_0_0_0.dat"
-	OutputFileName="/scratch/users/phil1/lmc_ges_tracking/Halo416/sub_info.dat"
+	NMerger = 10
 )
 
 // Haloes is a collection of raw columns from the tree.dat files.
@@ -46,13 +46,21 @@ func (t *LookupTable) Find(id int32) int32 {
 
 // HaloTrack contains the evolution history of a single halo.
 func main() {	
+    if len(os.Args) != 2 {
+        panic(fmt.Sprintf("You must supply a file with tree names, " +
+            "output names, and z=0 MW IDs"))
+    }
+
 	inputName := os.Args[1]
 	treeFileNames, outFileNames, mwIDs := ParseInputFile(inputName)
+
+	log.Printf("Running on %d haloes", len(mwIDs))
 	
 	cfg := catio.DefaultConfig
 	cfg.SkipLines = 45
 
 	for i := range treeFileNames {
+		log.Printf("Parsing %s", treeFileNames[i])
 		rd := catio.TextFile(treeFileNames[i], cfg)
 		
 		// Read the columns
@@ -67,12 +75,14 @@ func main() {
 			Mvir: mvir, Vmax: vmax,
 			X: ToVector(x, y, z), V: ToVector(vx, vy, vz) }
 		
+		log.Printf("Analyzing halo-%d's mergers", mwIDs[i])
 		runtime.GC()
 		SortHaloes(h)
 		runtime.GC()
 		t := CalcTracks(h, mwIDs[i])
-		mergers := MajorMergers(t, 10)		
-		WriteMergers(outFileNames[i], h, t, mergers, int(mwIDs[i]))
+		mergers := MajorMergers(t, NMerger)
+		log.Printf("Writing %d mergers to %s", NMerger, outFileNames[i])
+		WriteMergers(outFileNames[i], h, t, mergers)
 		runtime.GC()
 	}
 }
@@ -133,7 +143,7 @@ func SortHaloes(h *Haloes) {
 }
 
 type Tracks struct {
-	N int
+	N, MWIdx int
 	Starts, Ends []int32
 	IsReal, IsMWSub []bool
 	MpeakInfall []float32
@@ -147,6 +157,7 @@ func CalcTracks(h *Haloes, mwID int32) *Tracks {
 	
 	t.IsReal = IsReal(h, t)
 	t.IsMWSub = IsMWSub(h, t, mwID)
+	t.MpeakInfall = MpeakInfall(h, t)
 	
 	return t
 }
@@ -180,8 +191,8 @@ func IsMWSub(h *Haloes, t *Tracks, mwID int32) []bool {
 	if mwIdx == t.N {
 		panic(fmt.Sprintf("Could not find a z=0 halo with ID %d", mwID))
 	}
-
 	
+	t.MWIdx = mwIdx
 	minID, maxID := h.DFID[t.Starts[mwIdx]], h.DFID[t.Ends[mwIdx] - 1]
 	
 	out := make([]bool, t.N)
@@ -201,7 +212,7 @@ func IsMWSub(h *Haloes, t *Tracks, mwID int32) []bool {
 func MpeakInfall(h *Haloes, t *Tracks) []float32 {
 	out := make([]float32, t.N)
 	for i := range out {
-		for j := t.Ends[i]+1; j >= t.Starts[i] && h.UPID[j] == -1; j-- {
+		for j := t.Ends[i]-1; j >= t.Starts[i] && h.UPID[j] == -1; j-- {
 			if h.Mvir[j] > out[i] { out[i] = h.Mvir[j] }
 		}
 	}
@@ -243,7 +254,7 @@ func IDOrder(id []int32) []int32 {
 	return idx32
 }
 
-func WriteMergers(fname string, h *Haloes, t *Tracks, mergers []int, iMW int) {
+func WriteMergers(fname string, h *Haloes, t *Tracks, mergers []int) {
 	f, err := os.Create(fname)
 	if err != nil { panic(err.Error()) }
 	defer f.Close()
@@ -254,20 +265,20 @@ func WriteMergers(fname string, h *Haloes, t *Tracks, mergers []int, iMW int) {
 	err = binary.Write(f, order, int64(MaxSnap))
 	if err != nil { panic(err.Error()) }
 	
-	WriteHalo(f, h, t, iMW)
+	WriteHalo(f, h, t, t.MWIdx)
 	for i := range mergers {
 		WriteHalo(f, h, t, mergers[i])
 	}
 }
 
-func WriteHalo(f *os.File, h *Haloes, t *Tracks, i int) {
+func WriteHalo(f *os.File, h *Haloes, t *Tracks, i0 int) {
 	id := make([]int32, MaxSnap+1)
 	mvir := make([]float32, MaxSnap+1)
 	vmax := make([]float32, MaxSnap+1)
 	x := make([][3]float32, MaxSnap+1)
 	v := make([][3]float32, MaxSnap+1)
 
-	for i := t.Starts[i]; i < t.Ends[i]; i++ {
+	for i := t.Starts[i0]; i < t.Ends[i0]; i++ {
 		s := h.Snap[i]
 		id[s] = h.ID[i]
 		mvir[s] = h.Mvir[i]
@@ -310,8 +321,6 @@ func ParseInputFile(fname string) ([]string, []string, []int32) {
 				cols = append(cols, tok[i])
 			}
 		}
-
-		fmt.Println(tok, len(tok), cols, len(cols))
 		
 		if len(cols) != 3 {
 			panic(fmt.Sprintf("Line %d of %s is '%s', but you need there " +
