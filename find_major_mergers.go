@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"sort"
 	"runtime"
+	"io"
 	"os"
+	"path"
 	"encoding/binary"
 	"io/ioutil"
 	"strings"
@@ -32,6 +34,46 @@ type LookupTable struct {
 	Order, ID []int32
 }
 
+
+// HaloTrack contains the evolution history of a single halo.
+func main() {	
+    if len(os.Args) != 2 {
+        panic(fmt.Sprintf("You must supply a file with tree names, " +
+            "output names, and z=0 MW IDs"))
+    }
+
+	inputName := os.Args[1]
+	treeDirs, outFileNames, mwIDs := ParseInputFile(inputName)
+
+	log.Printf("Running on %d haloes", len(mwIDs))
+
+	for i := range treeDirs {
+		h := ReadTree(treeDirs[i])
+		MemoryLog()
+
+		log.Printf("Analyzing halo-%d's mergers", mwIDs[i])
+		runtime.GC()
+
+		SortHaloes(h)
+		runtime.GC()
+
+		t := CalcTracks(h, mwIDs[i])
+		mergers := MajorMergers(t, NMerger)
+		MemoryLog()
+		log.Printf("Writing %d mergers to %s", NMerger, outFileNames[i])
+		WriteMergers(outFileNames[i], h, t, mergers)
+		runtime.GC()
+	}
+}
+
+func MemoryLog() {
+	ms := &runtime.MemStats{ }
+	runtime.ReadMemStats(ms)
+	log.Printf("Allocated: %.1f In Use: %.1f Idle: %.1f\n",
+		float64(ms.Alloc) / 1e9, float64(ms.HeapInuse) / 1e9,
+		float64(ms.HeapIdle) / 1e9)
+}
+
 func NewLookupTable(id []int32) *LookupTable {
 	order := IDOrder(id)
 	return &LookupTable{ order, id }
@@ -44,47 +86,241 @@ func (t *LookupTable) Find(id int32) int32 {
 	return t.Order[j]
 }
 
-// HaloTrack contains the evolution history of a single halo.
-func main() {	
-    if len(os.Args) != 2 {
-        panic(fmt.Sprintf("You must supply a file with tree names, " +
-            "output names, and z=0 MW IDs"))
-    }
+func CountHeaderLines(fileName string) (n int , empty bool) {
+	f, err := os.Open(fileName)
+	if err != nil { panic(err.Error()) }
+	defer f.Close()
 
-	inputName := os.Args[1]
-	treeFileNames, outFileNames, mwIDs := ParseInputFile(inputName)
+	stat, err := f.Stat()
+	if err != nil { panic(err.Error()) }
+	nMax := stat.Size()
 
-	log.Printf("Running on %d haloes", len(mwIDs))
+	if nMax > 50000 { nMax = 50000 }
 	
-	cfg := catio.DefaultConfig
-	cfg.SkipLines = 45
+	buf := make([]byte, nMax)
+	var nRead int
+	nRead, err = io.ReadFull(f, buf)
+	if err != nil { panic(err.Error()) }
+	if int64(nRead) < nMax { return 0, true }
 
-	for i := range treeFileNames {
-		log.Printf("Parsing %s", treeFileNames[i])
-		rd := catio.TextFile(treeFileNames[i], cfg)
-		
-		// Read the columns
-		cols := rd.ReadInts([]int{ 1, 3, 6, 28, 31 })
-		id, descid, upid, dfid, snap := cols[0], cols[1],
-			cols[2], cols[3],cols[4]
-		fcols := rd.ReadFloat32s([]int{ 10, 16, 17, 18, 19, 20, 21, 22})
-		mvir, vmax, x, y, z, vx, vy, vz := fcols[0], fcols[1],
-			fcols[2], fcols[3], fcols[4], fcols[5], fcols[6], fcols[7]
-		h := &Haloes{ ID: ToInt32(id), DescID: ToInt32(descid),
-			UPID: ToInt32(upid), DFID: ToInt32(dfid), Snap: ToInt32(snap),
-			Mvir: mvir, Vmax: vmax,
-			X: ToVector(x, y, z), V: ToVector(vx, vy, vz) }
-		
-		log.Printf("Analyzing halo-%d's mergers", mwIDs[i])
-		runtime.GC()
-		SortHaloes(h)
-		runtime.GC()
-		t := CalcTracks(h, mwIDs[i])
-		mergers := MajorMergers(t, NMerger)
-		log.Printf("Writing %d mergers to %s", NMerger, outFileNames[i])
-		WriteMergers(outFileNames[i], h, t, mergers)
-		runtime.GC()
+	headerLines := 0
+	line := 1
+	for i := range buf {
+		switch buf[i] {
+		case '\n':
+			line++
+		case '#':
+			headerLines = line
+		}
 	}
+
+	return headerLines, false
+}
+
+func ReadTree(treeDir string) *Haloes {
+	files := TreeFileNames(treeDir)
+	hs := []*Haloes{ }
+	for i := range files {
+		runtime.GC()
+		h := ReadTreeFile(files[i])
+		if h != nil { hs = append(hs, h) }
+	}
+
+	return JoinHaloes(hs)
+}
+
+func TreeFileNames(dir string) []string {
+	files, err := ioutil.ReadDir(dir)
+	if err != nil { panic(err.Error()) }
+	
+	out := []string{ }
+	for i := range files {
+		name := files[i].Name()
+		if len(name) >= 8 &&
+			name[:4] == "tree" &&
+			name[len(name)-4:] == ".dat" {
+			out = append(out, path.Join(dir, name))
+		}
+	}
+
+	return out
+}
+
+func ReadTreeFile(file string) *Haloes {
+	cfg := catio.DefaultConfig
+
+	var empty bool
+	if cfg.SkipLines, empty = CountHeaderLines(file); empty {
+		return nil
+	}
+
+
+	log.Printf("Parsing %s", file)
+	rd := catio.TextFile(file, cfg)
+	
+	// Read the columns
+	cols := rd.ReadInts([]int{ 1, 3, 6, 28, 31 })
+	id, descid, upid, dfid, snap := cols[0], cols[1],
+		cols[2], cols[3],cols[4]
+	fcols := rd.ReadFloat32s([]int{ 10, 16, 17, 18, 19, 20, 21, 22})
+	mvir, vmax, x, y, z, vx, vy, vz := fcols[0], fcols[1],
+		fcols[2], fcols[3], fcols[4], fcols[5], fcols[6], fcols[7]
+	MemoryLog()
+	return &Haloes{ ID: ToInt32(id), DescID: ToInt32(descid),
+		UPID: ToInt32(upid), DFID: ToInt32(dfid), Snap: ToInt32(snap),
+		Mvir: mvir, Vmax: vmax, X: ToVector(x, y, z), V: ToVector(vx, vy, vz) }
+}
+
+func JoinHaloes(hs []*Haloes) *Haloes {
+	h := &Haloes{ }
+	log.Println("IDs")
+	MemoryLog()
+	JoinID(hs, h)
+	runtime.GC()
+	log.Println("DescID")
+	MemoryLog()
+	JoinDescID(hs, h)
+	runtime.GC()
+	log.Println("UPID")
+	MemoryLog()
+	JoinUPID(hs, h)
+	runtime.GC()
+	log.Println("DFID")
+	MemoryLog()
+	JoinDFID(hs, h)
+	runtime.GC()
+	log.Println("Snap")
+	MemoryLog()
+	JoinSnap(hs, h)
+	runtime.GC()
+	log.Println("Mvir")
+	MemoryLog()
+	JoinMvir(hs, h)
+	runtime.GC()
+	log.Println("VMax")
+	MemoryLog()
+	JoinVmax(hs, h)
+	runtime.GC()
+	log.Println("X")
+	MemoryLog()
+	JoinX(hs, h)
+	runtime.GC()
+	log.Println("V")
+	MemoryLog()
+	JoinV(hs, h)
+	return h
+}
+
+func JoinID(hs []*Haloes, h *Haloes) {
+	xs := [][]int32{ }
+	for i := range hs { xs = append(xs, hs[i].ID) }
+	h.ID = JoinInt32(xs)
+	for i := range hs { hs[i].ID = nil }
+}
+
+func JoinDescID(hs []*Haloes, h *Haloes) {
+	xs := [][]int32{ }
+	for i := range hs { xs = append(xs, hs[i].DescID) }
+	h.DescID = JoinInt32(xs)
+	for i := range hs { hs[i].DescID = nil }
+}
+
+func JoinUPID(hs []*Haloes, h *Haloes) {
+	xs := [][]int32{ }
+	for i := range hs { xs = append(xs, hs[i].UPID) }
+	h.UPID = JoinInt32(xs)
+	for i := range hs { hs[i].UPID = nil }
+}
+
+func JoinDFID(hs []*Haloes, h *Haloes) {
+	xs := [][]int32{ }
+	for i := range hs { xs = append(xs, hs[i].DFID) }
+	h.DFID = JoinInt32(xs)
+	for i := range hs { hs[i].DFID = nil }
+}
+
+func JoinSnap(hs []*Haloes, h *Haloes) {
+	xs := [][]int32{ }
+	for i := range hs { xs = append(xs, hs[i].Snap) }
+	h.Snap = JoinInt32(xs)
+	for i := range hs { hs[i].Snap = nil }
+}
+
+func JoinMvir(hs []*Haloes, h *Haloes) {
+	xs := [][]float32{ }
+	for i := range hs { xs = append(xs, hs[i].Mvir) }
+	h.Mvir = JoinFloat32(xs)
+	for i := range hs { hs[i].Mvir = nil }
+}
+
+func JoinVmax(hs []*Haloes, h *Haloes) {
+	xs := [][]float32{ }
+	for i := range hs { xs = append(xs, hs[i].Vmax) }
+	h.Vmax = JoinFloat32(xs)
+	for i := range hs { hs[i].Vmax = nil }
+}
+
+func JoinX(hs []*Haloes, h *Haloes) {
+	xs := [][][3]float32{ }
+	for i := range hs { xs = append(xs, hs[i].X) }
+	h.X = JoinVec32(xs)
+	for i := range hs { hs[i].X = nil }
+}
+
+func JoinV(hs []*Haloes, h *Haloes) {
+	xs := [][][3]float32{ }
+	for i := range hs { xs = append(xs, hs[i].V) }
+	h.V = JoinVec32(xs)
+	for i := range hs { hs[i].V = nil }
+}
+
+
+func JoinInt32(xs [][]int32) []int32 {
+	n := 0
+	for i := range xs { n += len(xs[i]) }
+	
+	out := make([]int32, n)
+	j := 0
+	for i := range xs {
+		for k := range xs[i] {
+			out[j] = xs[i][k]
+			j++
+		}
+	}
+
+	return out
+}
+
+func JoinFloat32(xs [][]float32) []float32 {
+	n := 0
+	for i := range xs { n += len(xs[i]) }
+	
+	out := make([]float32, n)
+	j := 0
+	for i := range xs {
+		for k := range xs[i] {
+			out[j] = xs[i][k]
+			j++
+		}
+	}
+
+	return out
+}
+
+func JoinVec32(xs [][][3]float32) [][3]float32 {
+	n := 0
+	for i := range xs { n += len(xs[i]) }
+	
+	out := make([][3]float32, n)
+	j := 0
+	for i := range xs {
+		for k := range xs[i] {
+			out[j] = xs[i][k]
+			j++
+		}
+	}
+
+	return out
 }
 
 func ToInt32(x []int) []int32 {
