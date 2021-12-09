@@ -193,7 +193,7 @@ func ConvertVectors(rd catio.Reader, f *os.File, order []int32) {
 	cols := rd.ReadFloat32s(VectorCols)
 
 	buf := make([][3]float32, len(cols[0]))
-	for i := range cols {
+	for i := 0; i < len(cols); i += 3 {
 		ReorderToVector32([3][]float32{cols[i],cols[i+1],cols[i+2]}, order, buf)
 		err := binary.Write(f, binary.LittleEndian, buf)
 		if err != nil { panic(err.Error()) }
