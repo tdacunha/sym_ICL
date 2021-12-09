@@ -157,6 +157,15 @@ func ConvertTreeFile(treeName, outName string) {
 	runtime.GC()
 }
 
+func WriteHeader(f *os.File, n int) {
+	WriteInt(f, n)
+	WriteInt(f, 1 + len(IntCols) + len(FloatCols) + len(VectorCols))
+	WriteInt(f, DFIDCol)
+	for i := range IntCols { WriteInt(f, IntCols[i]) }
+	for i := range FloatCols { WriteInt(f, FloatCols[i]) }
+	for i := range VectorCols { WriteInt(f, VectorCols[i]) }
+}
+
 func ConvertInts(rd catio.Reader, f *os.File) []int32 {
 	// Read the columns
 	colIdxs := []int{ DFIDCol }
@@ -165,7 +174,8 @@ func ConvertInts(rd catio.Reader, f *os.File) []int32 {
 	dfid := ToInt32(cols[0])
 	order := IDOrder(dfid)
 
-	WriteHeader(f, len(order))
+	hd := CreateTreeHeader(len(order))
+	lib.WriteTreeHeader(f, hd)
 
 	buf := dfid
 	byteOrder := binary.LittleEndian
@@ -176,6 +186,27 @@ func ConvertInts(rd catio.Reader, f *os.File) []int32 {
 	}
 
 	return order
+}
+
+func CreateTreeHeader(n int) *lib.TreeHeader {
+	cols := []int32{ int32(DFIDCol) }
+	for i := range IntCols {
+		cols = append(cols, int32(IntCols[i]))
+	}
+	for i := range FloatCols {
+		cols = append(cols, int32(FloatCols[i]))
+	}
+	for i := 0; i < len(VectorCols); i += 3 {
+		cols = append(cols, int32(VectorCols[i]))
+	}
+	return &lib.TreeHeader{
+		lib.FixedHeader{
+			int32(n),
+			int32(1 + len(IntCols)),
+			int32(len(FloatCols)),
+			int32(len(VectorCols) / 3),
+		}, cols,
+	}
 }
 
 func ConvertFloats(rd catio.Reader, f *os.File, order []int32) {
@@ -240,15 +271,6 @@ func IDOrder(id []int32) []int32 {
 	for i := range idx32 { idx32[i] = int32(idx[i]) }
 	
 	return idx32
-}
-
-func WriteHeader(f *os.File, n int) {
-	WriteInt(f, n)
-	WriteInt(f, 1 + len(IntCols) + len(FloatCols) + len(VectorCols))
-	WriteInt(f, DFIDCol)
-	for i := range IntCols { WriteInt(f, IntCols[i]) }
-	for i := range FloatCols { WriteInt(f, FloatCols[i]) }
-	for i := range VectorCols { WriteInt(f, VectorCols[i]) }
 }
 
 func WriteInt(f *os.File, n int) {
