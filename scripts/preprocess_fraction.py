@@ -1,0 +1,101 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import lib
+import os.path as path
+import palette
+from palette import pc
+import scipy.interpolate as interpolate
+
+OMEGA_M = 0.286
+DIR_NAMES = [
+    "../tmp_data/Halo004"
+]
+MP = 2.8e5
+MVIR_CONV = MP * 300
+INDIVIDUAL_SUBS = 4
+N_BINS = 200
+
+def main():
+    palette.configure(False)
+
+    r_subs, prog_idxs = [None]*len(DIR_NAMES), [None]*len(DIR_NAMES)
+    for i in range(len(DIR_NAMES)):
+        r_subs[i], prog_idxs[i] = sub_info(DIR_NAMES[i])
+    r_sub, prog_idx = np.hstack(r_subs), np.hstack(prog_idxs)
+        
+    n_tot = interpolate.interp1d(r_sub, np.arange(len(r_sub)))
+
+    r_sub_pre = [None]*(INDIVIDUAL_SUBS + 1)
+    r_sub_pre[0] = np.sort(r_sub[prog_idx > -1])
+    for i in range(1, INDIVIDUAL_SUBS+1):
+        r_sub_pre[i] = np.sort(r_sub[(prog_idx >= 1) & (prog_idx <= i)])
+
+    # Plotting
+
+    r_range = (np.min(r_sub)+1e-4, 1.5)
+    r, n_tot = n_contain(r_sub, r_range, N_BINS)
+    
+    fig, ax = plt.subplots()
+    colors = [pc("k"), pc("r"), pc("o"), pc("b"), pc("p")]
+    for i in range(len(r_sub_pre)):
+        _, n_sub = n_contain(r_sub_pre[i], r_range, N_BINS)
+        ax.plot(r, n_sub / n_tot, c=colors[i])
+
+    ax.set_xlim(r_range[0], r_range[1])
+    ax.set_xlabel(r"$r/R_{\rm vir}$")
+    ax.set_ylabel(r"$N_{\rm preprocessed}(<r)/N_{\rm tot}(<r)$")
+
+    fig.savefig("../plots/preprocess_fraction.png")
+    
+
+def n_contain(r, r_range, n_bins):
+    n = np.zeros(n_bins+1) 
+    n[1:], edges = np.histogram(r, range=r_range, bins=n_bins)
+    n[0] = np.sum(r < r_range[0])
+    return edges, np.cumsum(n)
+    
+def sub_info(dir_name):
+    a = lib.scale_factors()
+    
+    m_idx, m = lib.read_mergers(path.join(dir_name, "mergers.dat"))
+    ci, b = lib.read_branches(path.join(dir_name, "branches.dat"))
+    x, mvir, snap = lib.read_tree(dir_name, ["X", "Mvir", "Snap"])
+        
+    surv_sub = np.where((snap[b["start"]] == 235) & b["is_main_sub"])[0]
+    conv = is_converged(b["start"][surv_sub], b["end"][surv_sub],
+                        mvir, cut_var="mpeak")
+    surv_sub = surv_sub[conv]
+        
+    x0 = x[b["start"][ci]]
+    rvir0 = lib.mvir_to_rvir(mvir[b["start"][ci]], a[-1], OMEGA_M)
+
+    pre_sub = b["preprocess"][surv_sub]
+    start_sub, end_sub = b["start"][surv_sub], b["end"][surv_sub]
+        
+    x_sub = x[b["start"]][surv_sub]
+    r_sub = distance(x0, x_sub)/rvir0
+
+    prog_idx = np.ones(len(r_sub)) * -1
+    prog_idx[pre_sub != -1] = 0
+    for i in range(1, len(m_idx)):
+        prog_idx[pre_sub == m_idx[i]] = i
+
+    return r_sub, prog_idx
+
+    
+def is_converged(start, end, mvir, cut_var="mvir"):
+    if cut_var == "mvir":
+        return mvir[start] > MVIR_CONV
+    elif cut_var == "mpeak":
+        mpeak = np.zeros(len(start))
+        for i in range(len(start)):
+            mpeak[i] = np.max(mvir[start[i]: end[i]])
+        return mpeak > MVIR_CONV
+    else:
+        assert 0
+    
+def distance(x0, x):
+    return np.sqrt(np.sum((x-x0)**2, axis=1))
+    
+        
+if __name__ == "__main__": main()
