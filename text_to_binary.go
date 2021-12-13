@@ -17,6 +17,8 @@ import (
 )
 
 var (
+	OldTreeVersion = true
+
 	DFIDCol = 28
 	// ID, DescID, UPID, Phantom, Snap, NextProg
 	IntCols = []int{ 1, 3, 6, 8, 31, 32 }
@@ -24,10 +26,43 @@ var (
 	FloatCols = []int{ 10, 12, 16, 39, 40, 41, 43, 45, 46, 47, 56 }
 	// X(3), V(3), J(3), A(3)
 	VectorCols = []int{17, 18, 19, 20, 21, 22, 23, 24, 25, 48, 49, 50 }
+
+	OldTreeMap = map[int]int{
+		28: 28,
+		1: 1,
+		3: 3,
+		6: 6,
+		8: 8,
+		31: 31,
+		32: 32, 
+		10: 10,
+		12: 12,
+		16: 16,
+		39: 36,
+		40: 37,
+		41: 38,
+		43: 40,
+		45: 42,
+		46: 43,
+		47: 44,
+		56: 53,
+		17: 17,
+		18: 18,
+		19: 19,
+		20: 20,
+		21: 21,
+		22: 22,
+		23: 23,
+		24: 24,
+		25: 25,
+		48: 45,
+		49: 46,
+		50: 47,
+	}
 )
 
 // HaloTrack contains the evolution history of a single halo.
-func main() {	
+func main() {
     if len(os.Args) != 2 {
         panic(fmt.Sprintf("You must supply a file with tree names and " +
             "output directories"))
@@ -39,6 +74,8 @@ func main() {
 	log.Printf("Running on %d haloes", len(treeDirs))
 
 	for i := range treeDirs {
+		MemoryLog()
+		os.MkdirAll(outDirs[i], 0744)
 		ConvertTree(treeDirs[i], outDirs[i])
 	}
 }
@@ -60,7 +97,7 @@ func CountHeaderLines(fileName string) (nLines, nTrees int) {
 	if err != nil { panic(err.Error()) }
 	nMax := stat.Size()
 
-	if nMax > 50000 { nMax = 50000 }
+	if nMax > 5000 { nMax = 5000 }
 	
 	buf := make([]byte, nMax)
 	_, err = io.ReadFull(f, buf)
@@ -80,11 +117,11 @@ func CountHeaderLines(fileName string) (nLines, nTrees int) {
 				line := buf[lineStart: lineEnd]
 
 				if line[0] != '#' {
-					nTrees, err = strconv.Atoi(string(line))
+					nTrees, err = strconv.Atoi(strings.Trim(string(line), " "))
 					if err != nil { nTrees = -1 }
 				}
 				
-				lineStart = lineEnd
+				lineStart = lineEnd+1
 			}
 
 			if buf[i] == 0 { break }
@@ -157,20 +194,16 @@ func ConvertTreeFile(treeName, outName string) {
 	runtime.GC()
 }
 
-func WriteHeader(f *os.File, n int) {
-	WriteInt(f, n)
-	WriteInt(f, 1 + len(IntCols) + len(FloatCols) + len(VectorCols))
-	WriteInt(f, DFIDCol)
-	for i := range IntCols { WriteInt(f, IntCols[i]) }
-	for i := range FloatCols { WriteInt(f, FloatCols[i]) }
-	for i := range VectorCols { WriteInt(f, VectorCols[i]) }
-}
-
 func ConvertInts(rd catio.Reader, f *os.File) []int32 {
 	// Read the columns
 	colIdxs := []int{ DFIDCol }
 	colIdxs = append(colIdxs, IntCols...)
+
+	if OldTreeVersion {
+		for i := range colIdxs { colIdxs[i] = OldTreeMap[colIdxs[i]] }
+	}
 	cols := rd.ReadInts(colIdxs)
+
 	dfid := ToInt32(cols[0])
 	order := IDOrder(dfid)
 
@@ -199,6 +232,7 @@ func CreateTreeHeader(n int) *lib.TreeHeader {
 	for i := 0; i < len(VectorCols); i += 3 {
 		cols = append(cols, int32(VectorCols[i]))
 	}
+
 	return &lib.TreeHeader{
 		lib.FixedHeader{
 			int32(n),
@@ -210,7 +244,13 @@ func CreateTreeHeader(n int) *lib.TreeHeader {
 }
 
 func ConvertFloats(rd catio.Reader, f *os.File, order []int32) {
-	cols := rd.ReadFloat32s(FloatCols)
+	colIdxs := make([]int, len(FloatCols))
+	if OldTreeVersion {
+		for i := range colIdxs { colIdxs[i] = OldTreeMap[FloatCols[i]] }
+	} else {
+		for i := range colIdxs { colIdxs[i] = FloatCols[i] }
+	}
+	cols := rd.ReadFloat32s(colIdxs)
 
 	buf := make([]float32, len(cols[0]))
 	for i := range cols {
@@ -221,7 +261,13 @@ func ConvertFloats(rd catio.Reader, f *os.File, order []int32) {
 }
 
 func ConvertVectors(rd catio.Reader, f *os.File, order []int32) {
-	cols := rd.ReadFloat32s(VectorCols)
+	colIdxs := make([]int, len(VectorCols))
+	if OldTreeVersion {
+		for i := range colIdxs { colIdxs[i] = OldTreeMap[VectorCols[i]] }
+	} else {
+		for i := range colIdxs { colIdxs[i] = VectorCols[i] }
+	}
+	cols := rd.ReadFloat32s(colIdxs)
 
 	buf := make([][3]float32, len(cols[0]))
 	for i := 0; i < len(cols); i += 3 {

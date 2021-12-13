@@ -2,155 +2,226 @@ package main
 
 import (
 	"fmt"
-	"sort"
+	"io/ioutil"
 	"runtime"
 	"os"
+	"path"
 	"encoding/binary"
+	"strings"
+	"strconv"
+	"log"
 	
 	"github.com/phil-mansfield/lmc_ges_tracking/lib"
-	"github.com/phil-mansfield/guppy/lib/catio"
 )
 
 var (
 	MaxSnap = int32(235)
-	TreeFileName="/scratch/users/enadler/Halo416/rockstar/trees/tree_0_0_0.dat"
-	OutputFileName="/scratch/users/phil1/lmc_ges_tracking/Halo416/sub_info.dat"
 )
+
+// HaloTrack contains the evolution history of a single halo.
+func main() {	
+	inputFile := os.Args[1]
+	treeDirs, mwIDs := ParseInputFile(inputFile)
+	for i := range treeDirs {
+		log.Printf("Analysing %s", treeDirs[i])
+		runtime.GC()
+		h := ReadFullTree(treeDirs[i])
+		log.Println("Creating lookup table")
+		h.IDTable = NewLookupTable(h.ID)
+		log.Println("Creating tracks")
+		t := CalcTracks(h, mwIDs[i])
+		log.Println("Writing tracks")
+		WriteTracks(treeDirs[i], t)
+	}
+	log.Println("Done")
+}
+
+func ParseInputFile(file string) ([]string, []int32){
+	b, err := ioutil.ReadFile(file)
+	if err != nil { panic(err.Error()) }
+	s := string(b)
+	lines := strings.Split(s, "\n")
+	dirs, mwIDs := []string{ }, []int32{ }
+	
+	for i := range lines {
+		line := strings.Trim(lines[i], " ")
+		if len(line) == 0 { continue }
+
+		tok := strings.Split(lines[i], " ")
+		cols := []string{ }
+		for i := range tok {
+			if len(tok[i]) > 0 {
+				cols = append(cols, tok[i])
+			}
+		}
+		
+		if len(cols) != 2 {
+			panic(fmt.Sprintf("Line %d of %s is '%s', but you need there " +
+				"to be two columns.", i+1, file, line))
+		}
+		
+		dirs = append(dirs, cols[0])
+		mwID, err := strconv.Atoi(cols[1])
+		if err != nil {
+			panic(fmt.Sprintf("Could not parse the ID on line %d of " +
+				"%s: %s", i+1, file, cols[1]))
+		}
+		mwIDs = append(mwIDs, int32(mwID))
+	}
+	
+	return dirs, mwIDs
+}
+
+func ReadFullTree(treeDir string) *Haloes {
+	fileNames := lib.TreeFileNames(treeDir)
+	files := make([]*os.File, len(fileNames))
+	for i := range files {
+		var err error
+		files[i], err = os.Open(fileNames[i])
+		if err != nil { panic(err.Error()) }
+	}
+
+	n := lib.TreeNTot(files)
+	h := &Haloes{
+		ID: make([]int32, n), DescID: make([]int32, n),
+		UPID: make([]int32, n), DFID: make([]int32, n),
+		Snap: make([]int32, n), Mvir: make([]float32, n),
+		IDTable: nil, 
+	}
+
+	lib.ReadTreeVarFullInt(files, "ID", h.ID)
+	lib.ReadTreeVarFullInt(files, "DescID", h.DescID)
+	lib.ReadTreeVarFullInt(files, "UPID", h.UPID)
+	lib.ReadTreeVarFullInt(files, "DFID", h.DFID)
+	lib.ReadTreeVarFullInt(files, "Snap", h.Snap)
+	lib.ReadTreeVarFullFloat(files, "Mvir", h.Mvir)
+
+	return h
+}
 
 // Haloes is a collection of raw columns from the tree.dat files.
 type Haloes struct {
 	ID, DescID, UPID, DFID, Snap []int32
-	Mvir []float64
+	Mvir []float32
 	IDTable *LookupTable
 }
 
 type LookupTable struct {
-	Order, ID []int32
+	Idx []int32
 }
 
 func NewLookupTable(id []int32) *LookupTable {
-	order := IDOrder(id)
-	return &LookupTable{ order, id }
-}
-
-func (t *LookupTable) Find(id int32) int32 {
-	j := sort.Search(len(t.ID), func (j int) bool {
-		return t.ID[t.Order[j]] >= id
-	})
-	return t.Order[j]
-}
-
-// HaloTrack contains the evolution history of a single halo.
-func main() {	
-	fmt.Println()
-	
-	cfg := catio.DefaultConfig
-	cfg.SkipLines = 45
-
-	//rd := catio.TextFile(TreeFileName, cfg)
-	//
-	// Read the columns
-	//cols := rd.ReadInts([]int{ 1, 3, 6, 28, 31 })
-	//id, descid, upid, dfid, snap := cols[0], cols[1], cols[2], cols[3],cols[4]
-	//mvir := rd.ReadFloat64s([]int{ 10 })[0]
-	//h := &Haloes{ ID: id, DescID: descid, UPID: upid,
-	// DFID: dfid, Snap: snap, Mvir: mvir }
-	h := ReadBinaryHaloes("tmp_data/tree.bin")
-	SortHaloes(h)
-	runtime.GC()
-	t := CalcTracks(h)
-
-	_ = t
-}
-
-func ReadBinaryHaloes(fname string) *Haloes {
-	f, err := os.Open(fname)
-	if err != nil { err.Error() }
-	defer f.Close()
-
-	n := int32(0)
-	order := binary.LittleEndian
-	err = binary.Read(f, order, &n)
-	if err != nil { panic(err.Error()) }
-
-	h := &Haloes{ }
-	h.ID, h.DescID, h.UPID = make([]int32,n), make([]int32,n), make([]int32,n)
-	h.DFID, h.Snap, h.Mvir = make([]int32,n), make([]int32,n), make([]float64,n)
-
-	err = binary.Read(f, order, h.ID)
-	if err != nil { panic(err.Error()) }
-	err = binary.Read(f, order, h.DescID)
-	if err != nil { panic(err.Error()) }
-	err = binary.Read(f, order, h.UPID)
-	if err != nil { panic(err.Error()) }
-	err = binary.Read(f, order, h.DFID)
-	if err != nil { panic(err.Error()) }
-	err = binary.Read(f, order, h.Snap)
-	if err != nil { panic(err.Error()) }
-	err = binary.Read(f, order, h.Mvir)
-	if err != nil { panic(err.Error()) }
-	
-	return h
-}
-
-func ReorderInts(x, order []int32) []int32 {
-	out := make([]int32, len(order))
-	for i := range out {
-		out[i] = x[order[i]]
+	max := int32(-1)
+	for i := range id { 
+		if id[i] > max { max = id[i] }
 	}
-	return out
-}
-
-func ReorderFloat64s(x []float64, order []int32) []float64 {
-	out := make([]float64, len(order))
-	for i := range out {
-		out[i] = x[order[i]]
+	tab := &LookupTable{ make([]int32, max+1) }
+	for i := range tab.Idx { tab.Idx[i] = -2 }
+	for i := range id {
+		tab.Idx[id[i]] = int32(i)
 	}
-	return out
+	return tab
 }
 
-func SortHaloes(h *Haloes) {
-	order := IDOrder(h.DFID)
-	h.ID = ReorderInts(h.ID, order)
-	h.DescID = ReorderInts(h.DescID, order)
-	h.UPID = ReorderInts(h.UPID, order)
-	h.DFID = ReorderInts(h.DFID, order)
-	h.Snap = ReorderInts(h.Snap, order)
-	h.Mvir = ReorderFloat64s(h.Mvir, order)
-	h.IDTable = NewLookupTable(h.ID)
+func (tab *LookupTable) Find(id int32) int32 {
+	return tab.Idx[id]
 }
 
 type Tracks struct {
-	N int
+	N, MWIdx int
 	Starts, Ends []int32
 	IsReal, IsDisappear, IsMWSub []bool
 	HostIdx, TrackIdx [][]int32
 	IsReverseMerger, IsReverseSub, IsValidHost [][]bool
-	Mpeak []float64
+	Mpeak []float32
 	MostMassivePreHostTrack []int32
 }
 
-func CalcTracks(h *Haloes) *Tracks {
-	t := &Tracks{ }
+func WriteTracks(dir string, t *Tracks) {
+	f, err := os.Create(path.Join(dir, "branches.dat"))
+	if err != nil { panic(err.Error()) }
+	defer f.Close()
 	
-	t.Starts, t.Ends = StartsEnds(h)
-	t.N = len(t.Starts)
-	
-	t.IsReal = IsReal(h, t)
-	t.IsDisappear = IsDisappear(h, t)
-	t.IsMWSub = IsMWSub(h, t)
-		
-	t.HostIdx = FindAllHosts(h, t)	
-	t.TrackIdx = FindTrackIndices(h, t)
-	
-	t.IsReverseMerger = IsReverseMerger(h, t)
-	t.IsReverseSub = IsReverseSub(h, t)
-	t.IsValidHost = IsValidHost(h, t)
+	err = binary.Write(f, lib.ByteOrder, int32(t.N))
+	if err != nil { panic(err.Error()) }
+	err = binary.Write(f, lib.ByteOrder, int32(t.MWIdx))
+	if err != nil { panic(err.Error()) }
+	err = binary.Write(f, lib.ByteOrder, int32(0))
+	if err != nil { panic(err.Error()) }
+	err = binary.Write(f, lib.ByteOrder, t.Ends)
+	if err != nil { panic(err.Error()) }
+	err = binary.Write(f, lib.ByteOrder, t.IsReal)
+	if err != nil { panic(err.Error()) }
+	err = binary.Write(f, lib.ByteOrder, t.IsDisappear)
+	if err != nil { panic(err.Error()) }
+	err = binary.Write(f, lib.ByteOrder, t.IsMWSub)
+	if err != nil { panic(err.Error()) }
+	err = binary.Write(f, lib.ByteOrder, t.MostMassivePreHostTrack)
+	if err != nil { panic(err.Error()) }
+}
 
+func CalcTracks(h *Haloes, mwID int32) *Tracks {
+	t := &Tracks{ }
+
+	log.Println("StartsEnds")
+	t.Starts, t.Ends = StartsEnds(h)
+	MemoryLog()
+
+	t.N = len(t.Starts)
+
+	log.Println("FindMW")
+	t.MWIdx = FindMW(h, t, mwID)
+	MemoryLog()	
+
+	log.Println("IsReal")
+	t.IsReal = IsReal(h, t)
+	MemoryLog()
+
+	log.Println("IsDisappear")
+	t.IsDisappear = IsDisappear(h, t)
+	MemoryLog()
+
+	log.Println("IsMwSub")
+	t.IsMWSub = IsMWSub(h, t)
+	MemoryLog()		
+
+	log.Println("FindAllHosts")
+	t.HostIdx = FindAllHosts(h, t)	
+	MemoryLog()
+
+	log.Println("FindTrackIndices")
+	t.TrackIdx = FindTrackIndices(h, t)
+	MemoryLog()
+	
+	log.Println("IsReverseMerger")
+	t.IsReverseMerger = IsReverseMerger(h, t)
+	MemoryLog()
+
+	log.Println("IsReverseSub")
+	t.IsReverseSub = IsReverseSub(h, t)
+	MemoryLog()
+
+	log.Println("IsValidHost")
+	t.IsValidHost = IsValidHost(h, t)
+	MemoryLog()
+
+	log.Println("Mpeak")
 	t.Mpeak = Mpeak(h, t)
+	MemoryLog()
+
+	log.Println("MostMassivePreHostTrack")
 	t.MostMassivePreHostTrack = MostMasssivePreHostTrack(h, t)
+	MemoryLog()
 
 	return t
+}
+
+func MemoryLog() {
+	ms := &runtime.MemStats{ }
+	runtime.ReadMemStats(ms)
+	log.Printf("Allocated: %.1f In Use: %.1f Idle: %.1f\n",
+		float64(ms.Alloc) / 1e9, float64(ms.HeapInuse) / 1e9,
+		float64(ms.HeapIdle) / 1e9)
 }
 
 func StartsEnds(h *Haloes) (starts, ends []int32) {
@@ -164,6 +235,15 @@ func StartsEnds(h *Haloes) (starts, ends []int32) {
 	ends = append(ends, int32(len(h.DFID)))
 
 	return starts, ends
+}
+
+func FindMW(h *Haloes, t *Tracks, mwID int32) int {
+	for i := range t.Starts {
+		if h.ID[t.Starts[i]] == mwID {
+			return i
+		}
+	}
+	panic(fmt.Sprintf("Halo with ID %d not found", mwID))
 }
 
 func IsReal(h *Haloes, t *Tracks) []bool {
@@ -186,8 +266,8 @@ func IsDisappear(h *Haloes, t *Tracks) []bool {
 }
 
 func IsMWSub(h *Haloes, t *Tracks) []bool {
-	minID, maxID := h.DFID[t.Starts[0]], h.DFID[t.Ends[0] - 1]
-	
+	minID, maxID := h.DFID[t.Starts[t.MWIdx]], h.DFID[t.Ends[t.MWIdx] - 1]
+
 	out := make([]bool, t.N)
 	for i := range out {
 		start, end := t.Starts[i], t.Ends[i]
@@ -210,9 +290,6 @@ func FindAllHosts(h *Haloes, t *Tracks) [][]int32 {
 			if h.UPID[j] != -1 {
 				k := h.IDTable.Find(h.UPID[j])
 				out[i] = append(out[i], k)
-				if i == 1 {
-					fmt.Println(j, h.UPID[j], k)
-				}
 			}
 		}
 	}
@@ -222,15 +299,19 @@ func FindAllHosts(h *Haloes, t *Tracks) [][]int32 {
 
 func FindTrackIndices(h *Haloes, t *Tracks) [][]int32 {
 	out := make([][]int32, t.N)
+	idxTable := h.Snap // Not used after this
+
+	for i := range t.HostIdx {
+		for j := t.Starts[i]; j < t.Ends[i]; j++ {
+			idxTable[j] = int32(i)
+		}
+	}
 
 	for i := range t.HostIdx {
 		out[i] = make([]int32, len(t.HostIdx[i]), len(t.HostIdx[i]))
 
 		for j := range out[i] {
-			start := FindFirstIndex(h, t.HostIdx[i][j])
-			out[i][j] =  int32(sort.Search(t.N, func (k int) bool {
-				return t.Starts[k] >= start
-			}))
+			out[i][j] = idxTable[t.HostIdx[i][j]]
 		}
 	}
 
@@ -301,7 +382,7 @@ func FindLastIndex(h *Haloes, i int32) int32 {
 func IsValidHost(h *Haloes, t *Tracks) [][]bool {
 	out := make([][]bool, t.N)
 	for i := range out {
-		out[i] = make([]bool, len(t.TrackIdx[i]), len(t.TrackIdx))
+		out[i] = make([]bool, len(t.TrackIdx[i]), len(t.TrackIdx[i]))
 		for j := range out[i] {
 			k := t.TrackIdx[i][j]
 			out[i][j] = t.IsReal[k] && !t.IsDisappear[k] &&
@@ -313,10 +394,10 @@ func IsValidHost(h *Haloes, t *Tracks) [][]bool {
 	return out
 }
 
-func Mpeak(h *Haloes, t *Tracks) []float64 {
-	out := make([]float64, t.N)
+func Mpeak(h *Haloes, t *Tracks) []float32 {
+	out := make([]float32, t.N)
 	for i := range out {
-		for j := t.Starts[i]; j <= t.Ends[j]; j++ {
+		for j := t.Starts[i]; j < t.Ends[i]; j++ {
 			if h.Mvir[j] > out[i] { out[i] = h.Mvir[j] }
 		}
 	}
