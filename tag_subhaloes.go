@@ -274,7 +274,7 @@ func IsMWSub(h *Haloes, t *Tracks) []bool {
 		for j := start; j < end; j++ {
 			if h.UPID[j] != -1 {
 				k := h.IDTable.Find(h.UPID[j])
-				out[i] = h.DFID[k] >= minID && h.DFID[k] <= maxID
+				out[i] = out[i] || h.DFID[k] >= minID && h.DFID[k] <= maxID
 			}
 		}
 	}
@@ -301,7 +301,7 @@ func FindTrackIndices(h *Haloes, t *Tracks) [][]int32 {
 	out := make([][]int32, t.N)
 	idxTable := h.Snap // Not used after this
 
-	for i := range t.HostIdx {
+	for i := range t.Starts {
 		for j := t.Starts[i]; j < t.Ends[i]; j++ {
 			idxTable[j] = int32(i)
 		}
@@ -326,8 +326,13 @@ func IsReverseMerger(h *Haloes, t *Tracks) [][]bool {
 
 		minID, maxID := h.DFID[t.Starts[i]], h.DFID[t.Ends[i] - 1]
 		for j := range t.HostIdx[i] {
+			// The last halo of the host (first in DF order)
 			start := t.Starts[t.TrackIdx[i][j]]
+			// If the descendent is -1, that means this wasn't a merger
+			// and we're okay
 			if h.DescID[start] != -1 {
+				// If the host's descendant has a DFID within this halo's DFID
+				// range, that means the "host" merged with the descendant.
 				k := h.IDTable.Find(h.DescID[start])
 				out[i][j] = h.DFID[k] >= minID && h.DFID[k] <= maxID
 			}
@@ -345,10 +350,15 @@ func IsReverseSub(h *Haloes, t *Tracks) [][]bool {
 
 		minID, maxID := h.DFID[t.Starts[i]], h.DFID[t.Ends[i] - 1]
 		for j := range t.HostIdx[i] {
+			// Last halo of the host (first in DF order)
 			start := t.Starts[t.TrackIdx[i][j]]
 
+			// Loop from last host halo to the timestep after the host-sub
+			// pairing was found
 			for k := start; k < t.HostIdx[i][j]; k++ {
+				// If this thing is a host halo, everything is fine
 				if h.UPID[k] != -1 {
+					// Check if you're a subhalo
 					l := h.IDTable.Find(h.UPID[k])
 					if h.DFID[l] >= minID && h.DFID[l] <= maxID {
 						out[i][j] = true
