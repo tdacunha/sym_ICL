@@ -56,6 +56,29 @@ def mvir_to_rvir(mvir, a, omega_M):
 
     return r_cmov
 
+def flatten(arrays):
+    """ flatten takes a list of numpy arrays and flattens it into a single
+    array. arrays[i].shape[0] can be any value, but all other components of the
+    shape vectors must be the same.
+    """
+
+    N = sum(arr.shape[0] for arr in arrays)
+
+    shape, dtype = arrays[0].shape, arrays[0].dtype
+    if len(shape) == 1:
+        out = np.zeros(N, dtype=dtype)
+    else:
+        out = np.zeros((N,) + shape[1:], dtype=dtype)
+
+    start, end = 0, 0
+    for i in range(len(arrays)):
+        end += arrays[i].shape[0]
+        out[start: end] = arrays[i]
+        start = end
+
+    return out
+
+
 def read_mergers(fname):
     f = open(fname, "rb")
 
@@ -133,14 +156,13 @@ def read_tree(dir_name, var_names):
     paths = [path.join(dir_name, fname) for fname in os.listdir(dir_name)]
     tree_files = [p for p in paths if path.isfile(p) and
                   len(p) > 6 and p[-6:] == "df.bin"]
-    hd = read_tree_header(tree_files[0])
 
     out = []
     for i in range(len(var_names)):
-        offset = tree_var_offset(hd, var_names[i])
-
         var = []
         for j in range(len(tree_files)):
+            hd = read_tree_header(tree_files[j])
+            offset = tree_var_offset(hd, var_names[i])
             f = open(tree_files[j], "rb")
             col = tree_var_col(hd, var_names[i])
             f.seek(offset)
@@ -158,7 +180,7 @@ def read_tree(dir_name, var_names):
                 x.fromfile(f, hd.n*3)
                 var.append(np.array(x, dtype=np.float).reshape((hd.n, 3)))
 
-        out.append(np.hstack(var))
+        out.append(flatten(var))
     return out
              
 def is_int(col, hd): return col < hd.n_int
