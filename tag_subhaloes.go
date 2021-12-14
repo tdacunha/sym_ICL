@@ -410,7 +410,7 @@ func MostMasssivePreHostTrack(h *Haloes, t *Tracks) []int32 {
 	for i := range out {
 		out[i] = -1
 		for j := range t.TrackIdx[i] {
-			if t.TrackIdx[i][j] == 0 { continue }
+			if t.TrackIdx[i][j] == int32(t.MWIdx) { continue }
 			k := t.TrackIdx[i][j]
 			if out[i] == -1 || t.Mpeak[k] > t.Mpeak[out[i]] {
 				out[i] = k
