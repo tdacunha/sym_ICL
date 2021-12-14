@@ -7,9 +7,11 @@ from palette import pc
 import scipy.interpolate as interpolate
 
 OMEGA_M = 0.286
-DIR_FORMAT = "/oak/stanford/orgs/kipac/users/phil1/simulations/MWest/Halo%03d"
-HALO_NUMS = [4, 113, 169, 170, 222, 229, 282, 327, 349, 407, 453, 523, 625,
-             659, 666, 719, 747, 756, 788, 858, 953, 975, 983]
+DIR_FORMAT = "../tmp_data/Halo%03d"
+HALO_NUMS = [4]
+#DIR_FORMAT = "/oak/stanford/orgs/kipac/users/phil1/simulations/MWest/Halo%03d"
+#HALO_NUMS = [4, 113, 169, 170, 222, 229, 282, 327, 349, 407, 453, 523, 625,
+#             659, 666, 719, 747, 756, 788, 858, 953, 975, 983]
 DIR_NAMES = [DIR_FORMAT % n for n in HALO_NUMS]
 MP = 2.8e5
 MVIR_CONV = MP * 300
@@ -60,17 +62,18 @@ def n_contain(r, r_range, n_bins):
 def sub_info(dir_name):
     a = lib.scale_factors()
     
-    m_idx, m = lib.read_mergers(path.join(dir_name, "mergers.dat"))
-    ci, b = lib.read_branches(path.join(dir_name, "branches.dat"))
+    m_idx, m = lib.read_mergers(dir_name)
+    b = lib.read_branches(dir_name)
     x, mvir, snap = lib.read_tree(dir_name, ["X", "Mvir", "Snap"])
-        
+    ci = m_idx[0]
+    
     surv_sub = np.where((snap[b["start"]] == 235) & b["is_main_sub"] &
                         b["is_real"])[0]
     conv = is_converged(b["start"][surv_sub], b["end"][surv_sub],
                         mvir, cut_var="mpeak")
     surv_sub = surv_sub[conv]
         
-    x0 = x[b["start"][ci]]
+    x0 = x[b["start"][m_idx[ci]]]
     rvir0 = lib.mvir_to_rvir(mvir[b["start"][ci]], a[-1], OMEGA_M)
 
     pre_sub = b["preprocess"][surv_sub]
