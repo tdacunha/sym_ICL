@@ -232,7 +232,7 @@ def main():
     import sys
     dir_name = sys.argv[1]
     m_idx, m = read_mergers(path.join(dir_name, "mergers.dat"))
-    ci, b = read_branches(path.join(dir_name, "branches.dat"))
+    b = read_branches(path.join(dir_name, "branches.dat"))
     
     mvir, x, snap = read_tree(dir_name, ["Mvir", "X", "Snap"])
 
