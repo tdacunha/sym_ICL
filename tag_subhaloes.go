@@ -130,7 +130,7 @@ func (tab *LookupTable) Find(id int32) int32 {
 type Tracks struct {
 	N, MWIdx int
 	Starts, Ends []int32
-	IsReal, IsDisappear, IsMWSub []bool
+	IsReal, IsDisappear, IsMWSub, IsMWSubFirst []bool
 	HostIdx, TrackIdx [][]int32
 	IsReverseMerger, IsReverseSub, IsValidHost [][]bool
 	Mpeak []float32
@@ -185,6 +185,10 @@ func CalcTracks(h *Haloes, mwID int32) *Tracks {
 	t.IsMWSub = IsMWSub(h, t)
 	MemoryLog()		
 
+	log.Println("IsMwSub")
+	t.IsMWSubFirst = IsMWSubFirst(h, t)
+	MemoryLog()		
+	
 	log.Println("FindAllHosts")
 	t.HostIdx = FindAllHosts(h, t)	
 	MemoryLog()
@@ -275,6 +279,23 @@ func IsMWSub(h *Haloes, t *Tracks) []bool {
 			if h.UPID[j] != -1 {
 				k := h.IDTable.Find(h.UPID[j])
 				out[i] = out[i] || h.DFID[k] >= minID && h.DFID[k] <= maxID
+			}
+		}
+	}
+
+	return out
+}
+
+func IsMWSubFirst(h *Haloes, t *Tracks) []bool {
+	minID, maxID := h.DFID[t.Starts[t.MWIdx]], h.DFID[t.Ends[t.MWIdx] - 1]
+
+	out := make([]bool, t.N)
+	for i := range out {
+		start, end := t.Starts[i], t.Ends[i]
+		for j := start; j < end; j++ {
+			if h.UPID[j] != -1 {
+				k := h.IDTable.Find(h.UPID[j])
+				out[i] = h.DFID[k] >= minID && h.DFID[k] <= maxID
 			}
 		}
 	}
@@ -418,6 +439,7 @@ func Mpeak(h *Haloes, t *Tracks) []float32 {
 func MostMasssivePreHostTrack(h *Haloes, t *Tracks) []int32 {
 	out := make([]int32, t.N)
 	for i := range out {
+		if t.IsMWSubFirst[i] { continue }
 		out[i] = -1
 		for j := range t.TrackIdx[i] {
 			if t.TrackIdx[i][j] == int32(t.MWIdx) { continue }
