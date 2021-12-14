@@ -7,12 +7,15 @@ from palette import pc
 import scipy.interpolate as interpolate
 
 OMEGA_M = 0.286
-DIR_NAMES = [
-    "../tmp_data/Halo004"
-]
+DIR_FORMAT = "/oak/stanford/orgs/kipac/users/phil1/simulations/MWest/Halo%03d"
+HALO_NUMS = [4, 113, 169, 170, 222, 229, 282, 327, 349, 407, 453, 523, 625,
+             659, 666, 719, 747, 756, 788, 858, 953, 975, 983]
+DIR_NAMES = [DIR_FORMAT % n for n in HALO_NUMS]
 MP = 2.8e5
 MVIR_CONV = MP * 300
-INDIVIDUAL_SUBS = 4
+INDIVIDUAL_SUBS = 10
+colors = [pc("k")] + [pc("r", 0.2 + (0.8 - 0.2)*p/INDIVIDUAL_SUBS) 
+                      for p in range(INDIVIDUAL_SUBS)]
 N_BINS = 200
 
 def main():
@@ -20,8 +23,9 @@ def main():
 
     r_subs, prog_idxs = [None]*len(DIR_NAMES), [None]*len(DIR_NAMES)
     for i in range(len(DIR_NAMES)):
+        print(DIR_NAMES[i])
         r_subs[i], prog_idxs[i] = sub_info(DIR_NAMES[i])
-    r_sub, prog_idx = np.hstack(r_subs), np.hstack(prog_idxs)
+    r_sub, prog_idx = lib.flatten(r_subs), lib.flatten(prog_idxs)
         
     n_tot = interpolate.interp1d(r_sub, np.arange(len(r_sub)))
 
@@ -36,7 +40,6 @@ def main():
     r, n_tot = n_contain(r_sub, r_range, N_BINS)
     
     fig, ax = plt.subplots()
-    colors = [pc("k"), pc("r"), pc("o"), pc("b"), pc("p")]
     for i in range(len(r_sub_pre)):
         _, n_sub = n_contain(r_sub_pre[i], r_range, N_BINS)
         ax.plot(r, n_sub / n_tot, c=colors[i])
@@ -61,7 +64,8 @@ def sub_info(dir_name):
     ci, b = lib.read_branches(path.join(dir_name, "branches.dat"))
     x, mvir, snap = lib.read_tree(dir_name, ["X", "Mvir", "Snap"])
         
-    surv_sub = np.where((snap[b["start"]] == 235) & b["is_main_sub"])[0]
+    surv_sub = np.where((snap[b["start"]] == 235) & b["is_main_sub"] &
+                        b["is_real"])[0]
     conv = is_converged(b["start"][surv_sub], b["end"][surv_sub],
                         mvir, cut_var="mpeak")
     surv_sub = surv_sub[conv]
@@ -79,7 +83,7 @@ def sub_info(dir_name):
     prog_idx[pre_sub != -1] = 0
     for i in range(1, len(m_idx)):
         prog_idx[pre_sub == m_idx[i]] = i
-
+        
     return r_sub, prog_idx
 
     
