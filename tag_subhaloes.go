@@ -438,15 +438,14 @@ func Mpeak(h *Haloes, t *Tracks) []float32 {
 
 func MostMasssivePreHostTrack(h *Haloes, t *Tracks) []int32 {
 	out := make([]int32, t.N)
+	for i := range out { out[i] = -1 }
 	for i := range out {
-		if t.IsMWSubFirst[i] { continue }
-		out[i] = -1
 		for j := range t.TrackIdx[i] {
-			if t.TrackIdx[i][j] == int32(t.MWIdx) {
+			k := t.TrackIdx[i][j]
+			if k == int32(t.MWIdx) {
 				out[i] = -1
 				continue
 			}
-			k := t.TrackIdx[i][j]
 			if out[i] == -1 || t.Mpeak[k] > t.Mpeak[out[i]] {
 				out[i] = k
 			}
