@@ -4,13 +4,39 @@ import numpy as np
 import os
 import os.path as path
 
+""" MERGER_DTYPE is the numpy datatype used by the main return value of
+read_mergers(). Positions and distances are in comvoing Mpc/h, velocities are
+physical peculiar velocities, and masses are in Msun/h.
+"""
 MERGER_DTYPE = [("id", "i4"), ("mvir", "f4"), ("vmax", "f4"),
                 ("x", "f4", (3,)), ("v", "f4", (3,))]
 
+""" BRANCHES_DTYPE is the numpy datatype used by the main return value of 
+read_branches(). 
+ - The main branch of a given halo within the depth-first merger tree can be 
+   found with x[start:end].
+ - is_real: false if a halo is definitely a numerical artefact (e.g. if it's
+   already a subhalo in its first snapshot).
+ - is_disappear: true if the subhalo disappears without merging. This is also
+   bad and probably means the thing is a numerical artefact.
+ - is_main_sub: true is the halo was ever a subhalo of the zoom-in box's main 
+   halo (includes splashback subhaloes).
+ - preprocess: the index of the branch of the largest halo that hosted this 
+   halo before it became a subhalo of the main halo. If the halo was never a
+   subhalo of the main halo, this is just the index of largest halo to have
+   every hosted this halo. If no other halo every hosted this halo before
+   it entered Rvir of the main halo, this is -1. Includes splashback subhaloes
+   and doesn't include collisions between subhaloes once they've already been
+   accreted.
+"""
 BRANCHES_DTYPE = [("start", "i4"), ("end", "i4"), ("is_real", "?"),
                   ("is_disappear", "?"), ("is_main_sub", "?"),
                   ("preprocess", "i4")]
 
+""" TREE_COL_NAMES is the mapping of variable names to columns in the
+consistent-trees file. These are the variable names you need to pass to
+read_tree().
+"""
 TREE_COL_NAMES = {
     "DFID": 28,
     "ID": 1,
@@ -37,9 +63,15 @@ TREE_COL_NAMES = {
 }
 
 def scale_factors(n_snap=236, a_start=1/20.0, a_end=1.0):
+    """ scale_factors returns the scale factors used by the simulation. The
+    defaults are set to correspond to the MWest suite's parameters.
+    """
     return 10**np.linspace(np.log10(a_start), np.log10(a_end), n_snap)
 
 def mvir_to_rvir(mvir, a, omega_M):
+    """ mvir_to_rvir converts a Bryan & Norman virial mass in Msun/h to a virial
+    radius in comoving Mpc/h at a given scale factor a, and omega_M.
+    """
     omega_L = 1 - omega_M
     Ez = np.sqrt(omega_M/a**3 + omega_L)
     rho_crit = 2.77519737e11*Ez**2
@@ -59,7 +91,8 @@ def mvir_to_rvir(mvir, a, omega_M):
 def flatten(arrays):
     """ flatten takes a list of numpy arrays and flattens it into a single
     array. arrays[i].shape[0] can be any value, but all other components of the
-    shape vectors must be the same.
+    shape vectors must be the same. THis is needed because hstack doesn't work
+    on tensor-arrays.
     """
 
     N = sum(arr.shape[0] for arr in arrays)
@@ -78,81 +111,69 @@ def flatten(arrays):
 
     return out
 
-
-def read_mergers(fname):
+def read_mergers(dir_name):
+    """ read_mergers reads major merger data from the halo directory dir_name.
+    It returns two arrays. The first, m_idx, is the indices of the major
+    mergers within the branches arrays. Index 0 is the main halo, index 1 is the
+    biggest merger (by Mpeak), index 2 is the second biggest, etc. As a
+    convenience, data from the main branches of those haloes are returned as
+    the second argument, m. m[halo_idx, snap] gives the  properties of the
+    halo at the index halo_idx in m_idx and the snapshot snap. The fields are
+    given by MERGER_DTYPE (see the header of this file). If a halo doesn't
+    exist at a given snapshot, values are set -1 ok will be set to false.
+    """
+    fname = path.join(dir_name, "mergers.dat")
     f = open(fname, "rb")
 
     n_snap = struct.unpack("i", f.read(4))[0]
     n_merger = struct.unpack("i", f.read(4))[0]
-    idx = array.array("i")
-    
-    idx.fromfile(f, n_merger)
-    idx = np.array(idx, dtype=int)
-    
+
+    idx = np.fromfile(f, np.int32, n_merger)    
     out = np.zeros((n_merger+1, n_snap), dtype=MERGER_DTYPE)
 
     for i in range(n_merger):
-        mvir = array.array("f")
-        mvir.fromfile(f, n_snap)
-        out["mvir"][i,:] = np.array(mvir, dtype=float)
-        
+        out["mvir"][i,:] = np.fromfile(f, np.float32, n_snap)
     for i in range(n_merger):
-        vmax = array.array("f")
-        vmax.fromfile(f, n_snap)
-        out["vmax"][i,:] = np.array(vmax, dtype=float)
-
+        out["vmax"][i,:] = np.fromfile(f, np.float32, n_snap)
     for i in range(n_merger):
-        id = array.array("i")
-        id.fromfile(f, n_snap)
-        out["id"][i,:] = np.array(id, dtype=int)
-
+        out["id"][i,:] = np.fromfile(f, np.int32, n_snap)
     for i in range(n_merger):
-        x = array.array("f")
-        x.fromfile(f, n_snap*3)
-        out["x"][i,:,:] = np.array(x, dtype=float).reshape((n_snap, 3))
-
+        out["x"][i,:,:] = np.fromfile(f, (np.float32, (3,)), n_snap)
     for i in range(n_merger):
-        v = array.array("f")
-        v.fromfile(f, n_snap*3)
-        out["v"][i,:,:] = np.array(x, dtype=float).reshape((n_snap, 3))
+        out["v"][i,:,:] = np.fromfile(f, (np.float32, (3,)), n_snap)
         
     f.close()
 
     return idx, out
 
-def read_branches(fname):
+def read_branches(dir_name):
+    """ read_branches reads main branch data from the halo directory dir_name.
+    It returns an array with length n_branches where each element has type
+    BRANCHES_DTYPE.
+    """
+    fname = path.join(dir_name, "branches.dat")
     f = open(fname, "rb")
     
     n = struct.unpack("i", f.read(4))[0]
     central_idx = struct.unpack("i", f.read(4))[0]
     out = np.zeros(n, dtype=BRANCHES_DTYPE)
-    
-    edges = array.array("i")
-    edges.fromfile(f, n+1)
-    
-    edges = np.array(edges, dtype=np.int32)
+
+    edges = np.fromfile(f, np.int32, n+1)
     out["start"] = edges[:-1]
     out["end"] = edges[1:]
+    out["is_real"] = np.fromfile(f, np.bool, n)
+    out["is_disappear"] = np.fromfile(f, np.bool, n)
+    out["is_main_sub"] = np.fromfile(f, np.bool, n)
+    out["preprocess"] = np.fromfile(f, np.int32, n)
     
-    is_real = array.array("b")
-    is_real.fromfile(f, n)
-    out["is_real"] = np.asarray(is_real, dtype=np.bool)
-    
-    is_disappear = array.array("b")
-    is_disappear.fromfile(f, n)
-    out["is_disappear"] = np.asarray(is_disappear, dtype=np.bool)
-    
-    is_main_sub = array.array("b")
-    is_main_sub.fromfile(f, n)
-    out["is_main_sub"] = np.asarray(is_main_sub, dtype=np.bool)
-    
-    preprocess = array.array("i")
-    preprocess.fromfile(f, n)
-    out["preprocess"] = np.asarray(preprocess, dtype=np.int32)
-    
-    return central_idx, out
+    return out
 
 def read_tree(dir_name, var_names):
+    """ read_tree reads variables from the halo directory halo_dir in
+    depth-first order. var_names is a list of variables to be read (see
+    TREE_COL_NAMES). A list of arrays is returned. Use the branches and merger
+    files to identify main branches and important haloes, respectively.
+    """
     paths = [path.join(dir_name, fname) for fname in os.listdir(dir_name)]
     tree_files = [p for p in paths if path.isfile(p) and
                   len(p) > 6 and p[-6:] == "df.bin"]
@@ -168,21 +189,17 @@ def read_tree(dir_name, var_names):
             f.seek(offset)
         
             if is_int(col, hd):
-                x = array.array("i")
-                x.fromfile(f, hd.n)
-                var.append(np.array(x, dtype=np.int32))
+                var.append(np.fromfile(f, np.int32, hd.n))
             elif is_float(col, hd):
-                x = array.array("f")
-                x.fromfile(f, hd.n)
-                var.append(np.array(x, dtype=np.float))
+                var.append(np.fromfile(f, np.float32, hd.n))
             else:
-                x = array.array("f")
-                x.fromfile(f, hd.n*3)
-                var.append(np.array(x, dtype=np.float).reshape((hd.n, 3)))
+                var.append(np.fromfile(f, (np.float32, (3,)), hd.n))
 
         out.append(flatten(var))
     return out
-             
+
+# Everything else in this file is an internal helper function
+
 def is_int(col, hd): return col < hd.n_int
 def is_float(col, hd): return col >= hd.n_int and col < hd.n_float
      
