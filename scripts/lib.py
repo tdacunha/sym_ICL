@@ -184,6 +184,7 @@ def read_tree(dir_name, var_names):
     files to identify main branches and important haloes, respectively.
     """
     paths = [path.join(dir_name, fname) for fname in os.listdir(dir_name)]
+    paths = sorted(paths)
     tree_files = [p for p in paths if path.isfile(p) and
                   len(p) > 6 and p[-6:] == "df.bin"]
 
@@ -198,7 +199,7 @@ def read_tree(dir_name, var_names):
             f.seek(offset)
         
             if is_int(col, hd):
-                var.append(np.fromfile(f, np.int32, hd.n))
+                var.append(np.fromfile(f, np.int32, hd.n))                
             elif is_float(col, hd):
                 var.append(np.fromfile(f, np.float32, hd.n))
             else:

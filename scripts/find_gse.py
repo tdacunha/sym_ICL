@@ -4,12 +4,12 @@ import lib
 import palette
 from palette import pc
 
-DIR_FORMAT = "../tmp_data/Halo%03d"
-HALO_NUMS = [4]
+#DIR_FORMAT = "../tmp_data/Halo%03d"
+#HALO_NUMS = [4]
+DIR_FORMAT = "/oak/stanford/orgs/kipac/users/phil1/simulations/MWest/Halo%03d"
+HALO_NUMS = [4, 113, 169, 170, 222, 229, 282, 327, 349, 407, 453, 523, 625,
+             659, 666, 719, 747, 756, 788, 858, 953, 975, 983]
 DIR_NAMES = [DIR_FORMAT % n for n in HALO_NUMS]
-#DIR_FORMAT = "/oak/stanford/orgs/kipac/users/phil1/simulations/MWest/Halo%03d"
-#HALO_NUMS = [4, 113, 169, 170, 222, 229, 282, 327, 349, 407, 453, 523, 625,
-#             659, 666, 719, 747, 756, 788, 858, 953, 975, 983]
 MP = 2.8e5
 MVIR_CONV = MP * 300
 
@@ -22,7 +22,7 @@ def merger_snap(h, x_sub, snap_sub):
     else:
         return np.min(snap_sub[merger])
     
-def merger_stats(b, m, x, mvir, snap):
+def merger_stats(b, m, m_idx, x, mvir, snap):
     a = lib.scale_factors()
     sub_idx = np.where(b["is_real"] & (~b["is_disappear"]) &
                        b["is_main_sub"] & (b["preprocess"] == -1))[0]
@@ -33,7 +33,6 @@ def merger_stats(b, m, x, mvir, snap):
     mpeak = np.zeros(len(sub_idx))
 
     mw_mass = np.max(mw["mvir"])
-    
     for j, i in enumerate(sub_idx):
         mvir_i = mvir[b["start"][i]: b["end"][i]]
         snap_i = snap[b["start"][i]: b["end"][i]]
@@ -41,7 +40,6 @@ def merger_stats(b, m, x, mvir, snap):
         m_snap = merger_snap(mw, x_i, snap_i)
         
         m_snap_sub = np.searchsorted(snap_i[::-1], m_snap)
-        
         mpeak[j] = np.max(mvir_i)/mw_mass
         scale[j] = a[m_snap]
         ratio[j] = mvir_i[::-1][m_snap_sub]/mw["mvir"][m_snap]
@@ -57,12 +55,13 @@ def main():
     palette.configure(False)
     
     for dir_i, dir_name in enumerate(DIR_NAMES):
+        print(dir_name)
         m_idx, m = lib.read_mergers(dir_name)
         b = lib.read_branches(dir_name)
         x, mvir, snap = lib.read_tree(dir_name, ["X", "Mvir", "Snap"])
         mw = m[0]
-        
-        mpeak, scale, ratio = merger_stats(b, m, x, mvir, snap)
+
+        mpeak, scale, ratio = merger_stats(b, m, m_idx, x, mvir, snap)
         order = np.argsort(mpeak)[-10:]
         top10 = order[-10:]
 
