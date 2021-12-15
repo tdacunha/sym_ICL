@@ -9,7 +9,8 @@ read_mergers(). Positions and distances are in comvoing Mpc/h, velocities are
 physical peculiar velocities, and masses are in Msun/h.
 """
 MERGER_DTYPE = [("id", "i4"), ("mvir", "f4"), ("vmax", "f4"),
-                ("x", "f4", (3,)), ("v", "f4", (3,))]
+                ("x", "f4", (3,)), ("v", "f4", (3,)), ("ok", "?"),
+                ("rvir", "f4")]
 
 """ BRANCHES_DTYPE is the numpy datatype used by the main return value of 
 read_branches(). 
@@ -61,6 +62,8 @@ TREE_COL_NAMES = {
     "J": 23,
     "A": 48,
 }
+
+OMEGA_M = 0.286
 
 def scale_factors(n_snap=236, a_start=1/20.0, a_end=1.0):
     """ scale_factors returns the scale factors used by the simulation. The
@@ -130,9 +133,13 @@ def read_mergers(dir_name):
 
     idx = np.fromfile(f, np.int32, n_merger)    
     out = np.zeros((n_merger+1, n_snap), dtype=MERGER_DTYPE)
-
+    a = scale_factors()
+    
     for i in range(n_merger):
         out["mvir"][i,:] = np.fromfile(f, np.float32, n_snap)
+        out["ok"][i,:] = out["mvir"][i,:] > 0
+        out["rvir"][i,:] = mvir_to_rvir(out["mvir"][i,:], a, OMEGA_M)
+        
     for i in range(n_merger):
         out["vmax"][i,:] = np.fromfile(f, np.float32, n_snap)
     for i in range(n_merger):
@@ -141,6 +148,8 @@ def read_mergers(dir_name):
         out["x"][i,:,:] = np.fromfile(f, (np.float32, (3,)), n_snap)
     for i in range(n_merger):
         out["v"][i,:,:] = np.fromfile(f, (np.float32, (3,)), n_snap)
+
+    out["rvir"][out["rvir"] == 0] = -1
         
     f.close()
 
