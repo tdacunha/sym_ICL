@@ -114,6 +114,53 @@ def flatten(arrays):
 
     return out
 
+def merger_snap(h, x_sub, snap_sub):
+    """ merger_snap returns the snapshot where a subhalo with a given set of
+    positions and snapshots first falls within h, a halo (i.e. a return value
+    of read_mergers()).
+    """
+    dist = np.sqrt(np.sum((h["x"][snap_sub] - x_sub)**2, axis=1))
+    within = dist < h["rvir"][snap_sub]
+    merger = h["ok"][snap_sub] & within
+    if np.sum(merger) == 0:
+        return -1
+    else:
+        return np.min(snap_sub[merger])
+
+def mw_mass_ratio(mw, a0, mass):
+    i = np.searchsorted(lib.scale_factors(), a0)
+    return mass/mw["mvir"][i]
+
+def pristine_merger_indices(b):
+    return np.where(b["is_real"] & (~b["is_disappear"]) &
+                    b["is_main_sub"] & (b["preprocess"] == -1))[0]
+
+def merger_stats(b, m, x, mvir, snap):
+    """ merger_stats returns several useful values: mpeak of the subhalo, the
+    scale factor of the merger, the snapshot of the merger, and the mass ratio
+    between the host and subhalo at the merger snapshot.
+    """
+    sub_idx = lib.pristine_merger_indices(b)
+    mw = m[0]
+
+    ratio = np.zeros(len(sub_idx))
+    merger_snap = np.zeros(len(sub_idx), dtype=int)
+    mpeak = np.zeros(len(sub_idx))
+    
+    mw_mass = np.max(mw["mvir"])
+    for j, i in enumerate(sub_idx):
+        mvir_i = mvir[b["start"][i]: b["end"][i]]
+        snap_i = snap[b["start"][i]: b["end"][i]]
+        x_i = x[b["start"][i]: b["end"][i]]
+        m_snap = merger_snap(mw, x_i, snap_i)
+        
+        m_snap_sub = np.searchsorted(snap_i[::-1], m_snap)
+        mpeak[j] = np.max(mvir_i)/mw_mass
+        merger_snap[j] = m_snap
+        ratio[j] = mvir_i[::-1][m_snap_sub]/mw["mvir"][m_snap]
+
+    return mpeak, merger_snap, ratio
+
 def read_mergers(dir_name):
     """ read_mergers reads major merger data from the halo directory dir_name.
     It returns two arrays. The first, m_idx, is the indices of the major

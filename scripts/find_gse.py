@@ -11,45 +11,7 @@ HALO_NUMS = [4, 113, 169, 170, 222, 229, 282, 327, 349, 407, 453, 523, 625,
              659, 666, 719, 747, 756, 788, 858, 953, 975, 983]
 DIR_NAMES = [DIR_FORMAT % n for n in HALO_NUMS]
 MP = 2.8e5
-MVIR_CONV = MP * 300
-
-def merger_snap(h, x_sub, snap_sub):    
-    dist = np.sqrt(np.sum((h["x"][snap_sub] - x_sub)**2, axis=1))
-    within = dist < h["rvir"][snap_sub]
-    merger = h["ok"][snap_sub] & within
-    if np.sum(merger) == 0:
-        return -1
-    else:
-        return np.min(snap_sub[merger])
-    
-def merger_stats(b, m, m_idx, x, mvir, snap):
-    a = lib.scale_factors()
-    sub_idx = np.where(b["is_real"] & (~b["is_disappear"]) &
-                       b["is_main_sub"] & (b["preprocess"] == -1))[0]
-    mw = m[0]
-
-    ratio = np.zeros(len(sub_idx))
-    scale = np.zeros(len(sub_idx))
-    mpeak = np.zeros(len(sub_idx))
-
-    mw_mass = np.max(mw["mvir"])
-    for j, i in enumerate(sub_idx):
-        mvir_i = mvir[b["start"][i]: b["end"][i]]
-        snap_i = snap[b["start"][i]: b["end"][i]]
-        x_i = x[b["start"][i]: b["end"][i]]
-        m_snap = merger_snap(mw, x_i, snap_i)
-        
-        m_snap_sub = np.searchsorted(snap_i[::-1], m_snap)
-        mpeak[j] = np.max(mvir_i)/mw_mass
-        scale[j] = a[m_snap]
-        ratio[j] = mvir_i[::-1][m_snap_sub]/mw["mvir"][m_snap]
-
-    return mpeak, scale, ratio
-
-def mw_mass_ratio(mw, a0, mass):
-    i = np.searchsorted(lib.scale_factors(), a0)
-    return mass/mw["mvir"][i]
-    
+MVIR_CONV = MP * 300O
 
 def main():
     palette.configure(False)
@@ -61,7 +23,8 @@ def main():
         x, mvir, snap = lib.read_tree(dir_name, ["X", "Mvir", "Snap"])
         mw = m[0]
 
-        mpeak, scale, ratio = merger_stats(b, m, m_idx, x, mvir, snap)
+        mpeak, m_snap, ratio = lib.merger_stats(b, m, x, mvir, snap)
+        scale = lib.scale_factors()[m_snap]
         order = np.argsort(mpeak)[-10:]
         top10 = order[-10:]
 
