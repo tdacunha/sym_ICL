@@ -17,7 +17,7 @@ import (
 )
 
 var (
-	OldTreeVersion = true
+	OldTreeVersion = false
 
 	DFIDCol = 28
 	// ID, DescID, UPID, Phantom, Snap, NextProg

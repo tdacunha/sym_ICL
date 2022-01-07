@@ -17,7 +17,7 @@ MP = 2.8e5
 MVIR_CONV = MP * 300
 INDIVIDUAL_SUBS = 10
 colors = [pc("k")] + [pc("r", 0.2 + (0.8 - 0.2)*p/INDIVIDUAL_SUBS) 
-                      for p in range(INDIVIDUAL_SUBS)]
+                      for p in range(INDIVIDUAL_SUBS)] + [pc("r"), pc("b")]
 N_BINS = 200
 
 def main():
@@ -31,10 +31,13 @@ def main():
         
     n_tot = interpolate.interp1d(r_sub, np.arange(len(r_sub)))
 
-    r_sub_pre = [None]*(INDIVIDUAL_SUBS + 1)
+    r_sub_pre = [None]*(INDIVIDUAL_SUBS + 1 + 2)
     r_sub_pre[0] = np.sort(r_sub[prog_idx > -1])
-    for i in range(1, INDIVIDUAL_SUBS+1):
-        r_sub_pre[i] = np.sort(r_sub[(prog_idx >= 1) & (prog_idx <= i)])
+    for i in range(1, INDIVIDUAL_SUBS + 1 + 2):
+        if i <= INDIVIDUAL_SUBS:
+            r_sub_pre[i] = np.sort(r_sub[(prog_idx >= 1) & (prog_idx <= i)])
+        else:
+            r_sub_pre[i] = np.sort(r_sub[prog_idx == i])
 
     # Plotting
 
@@ -42,7 +45,7 @@ def main():
     r, n_tot = n_contain(r_sub, r_range, N_BINS)
     
     fig, ax = plt.subplots()
-    for i in range(len(r_sub_pre)):
+    for i in range(len(r_sub_pre) - 2):
         _, n_sub = n_contain(r_sub_pre[i], r_range, N_BINS)
         ax.plot(r, n_sub / n_tot, c=colors[i])
 
@@ -51,7 +54,22 @@ def main():
     ax.set_ylabel(r"$N_{\rm preprocessed}(<r)/N_{\rm tot}(<r)$")
 
     fig.savefig("../plots/preprocess_fraction.png")
-    
+
+    fig, ax = plt.subplots()
+    for i in range(len(r_sub_pre) - 2, len(r_sub_pre)):
+        _, n_sub = n_contain(r_sub_pre[i], r_range, N_BINS)
+        ax.plot(r, n_sub / n_tot, c=colors[i])
+
+    plt.plot([], [], pc("r"), label=r"${\rm LMC}$")
+    plt.plot([], [], pc("b"), label=r"${\rm GSE}$")
+
+    plt.legend(loc="upper right")
+
+    ax.set_xlim(r_range[0], r_range[1])
+    ax.set_xlabel(r"$r/R_{\rm vir}$")
+    ax.set_ylabel(r"$N_{\rm preprocessed}(<r)/N_{\rm tot}(<r)$")
+
+    fig.savefig("../plots/preprocess_fraction_2.png")
 
 def n_contain(r, r_range, n_bins):
     n = np.zeros(n_bins+1) 
@@ -62,6 +80,7 @@ def n_contain(r, r_range, n_bins):
 def sub_info(dir_name):
     a = lib.scale_factors()
     
+    lmc_idx, gse_idx = lib.read_merger_idxs(dir_name)
     m_idx, m = lib.read_mergers(dir_name)
     b = lib.read_branches(dir_name)
     x, mvir, snap = lib.read_tree(dir_name, ["X", "Mvir", "Snap"])
@@ -86,7 +105,12 @@ def sub_info(dir_name):
     prog_idx[pre_sub != -1] = 0
     for i in range(1, len(m_idx)):
         prog_idx[pre_sub == m_idx[i]] = i
-        
+
+    if lmc_idx != -1:
+        prog_idx[pre_sub == lmc_idx] = len(m_idx)
+    if gse_idx != -1:
+        prog_idx[pre_sub == gse_idx] = len(m_idx) + 1
+
     return r_sub, prog_idx
 
     
