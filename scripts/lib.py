@@ -75,6 +75,12 @@ def mvir_to_rvir(mvir, a, omega_M):
     """ mvir_to_rvir converts a Bryan & Norman virial mass in Msun/h to a virial
     radius in comoving Mpc/h at a given scale factor a, and omega_M.
     """
+    
+    if type(mvir) == np.ndarray:
+        mvir = np.maximum(np.zeros(len(mvir)), mvir)
+    else:
+        mvir = max(0, mvir)
+
     omega_L = 1 - omega_M
     Ez = np.sqrt(omega_M/a**3 + omega_L)
     rho_crit = 2.77519737e11*Ez**2
@@ -140,11 +146,11 @@ def merger_stats(b, m, x, mvir, snap):
     scale factor of the merger, the snapshot of the merger, and the mass ratio
     between the host and subhalo at the merger snapshot.
     """
-    sub_idx = lib.pristine_merger_indices(b)
+    sub_idx = pristine_merger_indices(b)
     mw = m[0]
 
     ratio = np.zeros(len(sub_idx))
-    merger_snap = np.zeros(len(sub_idx), dtype=int)
+    m_snap = np.zeros(len(sub_idx), dtype=int)
     mpeak = np.zeros(len(sub_idx))
     
     mw_mass = np.max(mw["mvir"])
@@ -152,14 +158,14 @@ def merger_stats(b, m, x, mvir, snap):
         mvir_i = mvir[b["start"][i]: b["end"][i]]
         snap_i = snap[b["start"][i]: b["end"][i]]
         x_i = x[b["start"][i]: b["end"][i]]
-        m_snap = merger_snap(mw, x_i, snap_i)
+        m_snap_i = merger_snap(mw, x_i, snap_i)
         
-        m_snap_sub = np.searchsorted(snap_i[::-1], m_snap)
-        mpeak[j] = np.max(mvir_i)/mw_mass
-        merger_snap[j] = m_snap
-        ratio[j] = mvir_i[::-1][m_snap_sub]/mw["mvir"][m_snap]
+        m_snap_sub = np.searchsorted(snap_i[::-1], m_snap_i)
+        mpeak[j] = np.max(mvir_i)
+        m_snap[j] = m_snap_i
+        ratio[j] = mvir_i[::-1][m_snap_sub]/mw["mvir"][m_snap_i]
 
-    return mpeak, merger_snap, ratio
+    return mpeak, m_snap, ratio
 
 def read_mergers(dir_name):
     """ read_mergers reads major merger data from the halo directory dir_name.
@@ -254,6 +260,18 @@ def read_tree(dir_name, var_names):
 
         out.append(flatten(var))
     return out
+
+def read_merger_idxs(dir_name):
+    halo_name = dir_name.split("/")[-1]
+    parent_dir = "/".join(dir_name.split("/")[:-1])
+    merger_idxs_name = path.join(parent_dir, "merger_idxs.txt")
+    lmc_idx_cosmo, lmc_idx_zoom, gse_idx = np.loadtxt(
+        merger_idxs_name, usecols=(1, 4, 7), dtype=int).T
+    halo_names = np.loadtxt(merger_idxs_name, usecols=(0,), dtype=str)
+    for i in range(len(halo_names)):
+        if halo_name == halo_names[i]:
+            return lmc_idx_cosmo[i], lmc_idx_zoom[i], gse_idx[i]
+    raise ValueError("Could not find %s in %s" % (halo_name, merger_idxs_name))
 
 # Everything else in this file is an internal helper function
 
