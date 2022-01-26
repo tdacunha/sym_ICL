@@ -7,6 +7,9 @@ import (
 	"os"
 	"runtime"
 	"time"
+	"strconv"
+	"io/ioutil"
+	"strings"
 
 	"github.com/phil-mansfield/lmc_ges_tracking/lib"
 )
@@ -14,12 +17,11 @@ import (
 var (
 	MaxSnap = 235
 	Blocks = 8
-	NHaloes = 3
 	HRLevel = 1
 	
 	SnapshotFormat = "/scratch/users/enadler/Halo416/output/snapshot_%03d.%d"
-	TrackFileName = "/scratch/users/phil1/lmc_ges_tracking/Halo416/halo_tracks.txt"
-	OutputFormat = "/scratch/users/phil1/lmc_ges_tracking/Halo416/ids.%d"
+	MergerFileName = "/oak/stanford/orgs/kipac/users/phil1/simulations/MWest/Halo416/mergers.dat"
+	OutputFormat = "/oak/stanford/orgs/kipac/users/phil1/simulations/MWest/Halo416/particles/ids.%d"
 )
 
 // HaloTrack contains the evolution history of a single halo.
@@ -28,19 +30,90 @@ type HaloTrack struct {
 }
 
 func main() {
-	ids := InitIDs(NHaloes)
+    if len(os.Args) != 2 {
+        panic(fmt.Sprintf("You must supply a file with tree names, " +
+            "output names, and z=0 MW IDs"))
+    }
 
-	tracks := ReadTracks(TrackFileName, NHaloes)
+	inputName := os.Args[1]
+	blocks, snapFmts, mergerNames, outFmts := ParseInputFile(inputName)
+	for i := range blocks {
+		AnalyzeHalo(blocks[i], snapFmts[i], mergerNames[i], outFmts[i])
+	}
+}
+
+func ParseInputFile(fname string) (blocks []int, snapFmts,
+	mergerNames, outFmts []string) {
+
+	b, err := ioutil.ReadFile(fname)
+	if err != nil {
+		panic(fmt.Sprintf("Could not open input file: %s", err.Error()))
+	}
+	s := string(b)
+	
+	lines := strings.Split(s, "\n")
+	for i := range lines {
+		line := strings.Trim(lines[i], " ")
+		if len(line) == 0 { continue }
+
+		tok := strings.Split(lines[i], " ")
+		cols := []string{ }
+		for i := range tok {
+			if len(tok[i]) > 0 {
+				cols = append(cols, tok[i])
+			}
+		}
+		
+		if len(cols) != 4 {
+			panic(fmt.Sprintf("Line %d of %s is '%s', but you need there " +
+				"to be four columns.", i+1, fname, line))
+		}
+		
+		blockNum, err := strconv.Atoi(cols[0])
+		if err != nil {
+			panic(fmt.Sprintf("Could not block number the ID on line %d of " +
+				"%s: %s", i+1, fname, cols[0]))
+		}
+		blocks = append(blocks, blockNum)
+		
+		snapFmts = append(snapFmts, cols[1])
+		mergerNames = append(snapFmts, cols[2])
+		outFmts = append(snapFmts, cols[3])
+	}
+	
+	return blocks, snapFmts, mergerNames, outFmts
+}
+
+func AnalyzeHalo(blocks int, snapFmt, mergerName, outFmt string) {
+	mergers := lib.ReadMergers(mergerName)
+	nHaloes := len(mergers.Mvir)
+	ids := InitIDs(nHaloes)
+
+	// .____.
+	tracks := make([]HaloTrack, nHaloes)
+	for i := range tracks {
+		x := [3][]float32{  }
+		for k := 0; k < 3; k++ {
+			x[k] = make([]float32, nHaloes)
+			for j := range x[k] {
+				x[k][j] =  mergers.X[i][j][k]
+			}
+		}
+
+		tracks[i] = HaloTrack{ 
+			x[0], x[1], x[2], mergers.Rvir[i],
+		}
+	}
 
 	for snap := 0; snap <= MaxSnap; snap++ {
-		fmt.Println("tag", snap)
+		log.Printf("    Snap %d", snap)
 		runtime.GC()
 		
 		dtRead := 0.0
 		dtAdd := 0.0
 
-		for b := 0; b < Blocks; b++ {
-			fileName := fmt.Sprintf(SnapshotFormat, snap, b)
+		for b := 0; b < blocks; b++ {
+			fileName := fmt.Sprintf(snapFmt, snap, b)
 			t1 := time.Now()
 			xp, idp := ReadLevel(fileName, HRLevel)
 			t2 := time.Now()
@@ -55,7 +128,7 @@ func main() {
 		log.Printf("%5.3f %5.3f\n", dtRead, dtAdd)
 	}
 
-	WriteIDs(ids)
+	WriteIDs(outFmt, ids)
 }
 
 func InitIDs(n int) []map[int32]int {
@@ -140,9 +213,9 @@ func DR2(x1, x2 [3]float32) float32 {
 	return dr2
 }
 
-func WriteIDs(ids []map[int32]int) {
+func WriteIDs(outFmt string, ids []map[int32]int) {
 	for i := 0; i < len(ids); i++ {
-		fileName := fmt.Sprintf(OutputFormat, i)
+		fileName := fmt.Sprintf(outFmt, i)
 		f, err := os.Create(fileName)
 		if err != nil { panic(err.Error()) }
 
