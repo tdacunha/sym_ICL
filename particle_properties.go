@@ -8,6 +8,9 @@ import (
 	"os"
 	"runtime"
 	"sort"
+	"strconv"
+	"strings"
+	"io/ioutil"
 
 	"github.com/phil-mansfield/gravitree"
 	"github.com/phil-mansfield/lmc_ges_tracking/lib"
@@ -15,10 +18,11 @@ import (
 
 
 var (
+	HRLevel = 1
+/*
 	MaxSnap = 235
 	Blocks = 8
 	NHaloes = 3
-	HRLevel = 1
 
 	Epsilon = 0.00017
 	Mp = 2.81981e5
@@ -26,30 +30,109 @@ var (
 	SnapshotFormat = "/scratch/users/enadler/Halo416/output/snapshot_%03d.%d"
 	OutputFormat = "/scratch/users/phil1/lmc_ges_tracking/Halo416/part_%03d.%d"
 	IDsFormat = "/scratch/users/phil1/lmc_ges_tracking/Halo416/ids.%d"
+*/
 )
 
 func main() {
-	ids, snaps := make([][]int32, NHaloes), make([][]int16, NHaloes)
-	for i := 0; i < NHaloes; i++ {
-		ids[i], snaps[i] = ReadIDs(fmt.Sprintf(IDsFormat, i))
+    if len(os.Args) != 2 {
+        panic(fmt.Sprintf("You must supply a file with (1) comovoing force softneign scales, (2) particle masses, (3) block numbers, (4) snapshot formats, (5) merger names, (6) ID-file formats, (7) output formats."))
+    }
+
+	inputName := os.Args[1]	
+
+	eps, mp, blocks, snapFmt, mergerName, idFmt, outFmt :=
+		ParseInputFile(inputName)
+	for i := range eps {
+		AnalyzeHalo(eps[i], mp[i], blocks[i], snapFmt[i],
+			mergerName[i], idFmt[i], outFmt[i])
+	}
+}
+
+
+func ParseInputFile(fname string) (eps, mp []float64, blocks []int, snapFmt, mergerName, idFmt, outFmt []string) {
+
+	b, err := ioutil.ReadFile(fname)
+	if err != nil {
+		panic(fmt.Sprintf("Could not open input file: %s", err.Error()))
+	}
+	s := string(b)
+	
+	lines := strings.Split(s, "\n")
+	for i := range lines {
+		line := strings.Trim(lines[i], " ")
+		if len(line) == 0 { continue }
+
+		tok := strings.Split(lines[i], " ")
+		cols := []string{ }
+		for i := range tok {
+			if len(tok[i]) > 0 {
+				cols = append(cols, tok[i])
+			}
+		}
+		
+		if len(cols) != 7 {
+			panic(fmt.Sprintf("Line %d of %s is '%s', but you need there " +
+				"to be four columns.", i+1, fname, line))
+		}
+		
+		epsi, err := strconv.ParseFloat(cols[i], 64)
+		if err != nil {
+			panic(fmt.Sprintf("Could not parse eps on line %d of " +
+				"%s: %s", i+1, fname, cols[0]))
+		}
+		eps = append(eps, epsi)
+
+		mpi, err := strconv.ParseFloat(cols[1], 64)
+		if err != nil {
+			panic(fmt.Sprintf("Could not parse mp on line %d of " +
+				"%s: %s", i+1, fname, cols[1]))
+		}
+		mp = append(mp, mpi)
+
+		blocki, err := strconv.Atoi(cols[2])
+		if err != nil {
+			panic(fmt.Sprintf("Could not parse block number on line %d of " +
+				"%s: %s", i+1, fname, cols[2]))
+		}
+		blocks = append(blocks, blocki)	
+		
+		snapFmt = append(snapFmt, cols[3])
+		mergerName = append(mergerName, cols[4])
+		idFmt = append(idFmt, cols[5])
+		outFmt = append(outFmt, cols[6])
+	}
+	
+	return eps, mp, blocks, snapFmt, mergerName, idFmt, outFmt
+}
+
+
+func AnalyzeHalo(eps, mp float64, blocks int,
+	snapFmt, mergerName, idFmt, outFmt string) {
+	
+	mergers := lib.ReadMergers(mergerName)
+	nh, ns := len(mergers.Mvir), len(mergers.Mvir[0])
+
+	ids, snaps := make([][]int32, nh), make([][]int16, nh)
+	for i := 0; i < nh; i++ {
+		ids[i], snaps[i] = ReadIDs(fmt.Sprintf(idFmt, i))
 	}
 
-	x, v := make([][][3]float32, NHaloes), make([][][3]float32, NHaloes)
-	phi := make([][]float32, NHaloes)
-	for i := 0; i < NHaloes; i++ {
+	x, v := make([][][3]float32, nh), make([][][3]float32, nh)
+	phi := make([][]float32, nh)
+	for i := 0; i < nh; i++ {
 		x[i] = make([][3]float32, len(ids[i]))
 		v[i] = make([][3]float32, len(ids[i]))
 		phi[i] = make([]float32, len(ids[i]))
 	}
 
-	RvirMW0 := 0.212204 
-	MvirMW0 := 1.10200e+12 
+	RvirMW0 := float64(mergers.Mvir[0][ns-1])
+	MvirMW0 := float64(mergers.Rvir[0][ns-1])
 
-	for snap := 217; snap <= 235; snap++ {
+	for snap := 0; snap < ns; snap++ {
 		log.Println("part", snap)
 		runtime.GC()
 
-		for i := 0; i < NHaloes; i++ {	
+		for i := 0; i < nh; i++ {	
 			for j := range x[i] {
 				x[i][j] = [3]float32{ -1, -1, -1 }
 				v[i][j] = [3]float32{ -1, -1, -1 }
@@ -62,22 +145,22 @@ func main() {
 			xp, vp [][3]float32
 			idp []int32
 		)
-		for b := 0; b < Blocks; b++ {
-			fileName := fmt.Sprintf(SnapshotFormat, snap, b)
+		for b := 0; b < blocks; b++ {
+			fileName := fmt.Sprintf(snapFmt, snap, b)
 			xp, vp, idp, scale = ReadLevel(fileName, HRLevel)
 
 			order := IDOrder(idp)
 
-			for i := 0; i < NHaloes; i++ {
+			for i := 0; i < nh; i++ {
 				SetXV(snap, xp, vp, idp, order,
 					ids[i], snaps[i], x[i], v[i])
 			}
 		}
 		
-		for i := 0; i < NHaloes; i++ {
-			CalcPotential(snap, scale, snaps[i],
-				x[i], phi[i], RvirMW0, MvirMW0/Mp)
-			WriteParticles(fmt.Sprintf(OutputFormat, snap, i),
+		for i := 0; i < nh; i++ {
+			CalcPotential(eps, snap, scale, snaps[i],
+				x[i], phi[i], RvirMW0, MvirMW0/mp)
+			WriteParticles(fmt.Sprintf(outFmt, snap, i),
 				x[i], v[i], phi[i], len(ids[i]))
 		}
 	}
@@ -99,8 +182,8 @@ func SetXV(snap int, xp, vp [][3]float32, idp []int32,
 	}
 }
 
-func CalcPotential(snap int, scale float64, snaps []int16, x [][3]float32,
-	phi []float32, rvir, nvir float64) {
+func CalcPotential(eps float64, snap int, scale float64,
+	snaps []int16, x [][3]float32, phi []float32, rvir, nvir float64) {
 
 	x0, snap16 := [][3]float64{ }, int16(snap)
 	for i := range snaps {
@@ -114,7 +197,7 @@ func CalcPotential(snap int, scale float64, snaps []int16, x [][3]float32,
 	if len(x0) == 0 { return }
 
 	phi0 := make([]float64, len(x0))
-	ComputePhi(x0, phi0, rvir, nvir)
+	ComputePhi(eps, x0, phi0, rvir, nvir)
 	
 	j := 0
 	for i := range phi0 {
@@ -132,7 +215,9 @@ func (v Vec64Sort) Less(i, j int) bool { return v[i][2] < v[j][2] }
 func (v Vec64Sort) Swap(i, j int) { v[i], v[j] = v[j], v[i] }
 
 
-func ComputePhi(x [][3]float64, phi []float64, rvir, nvir float64) {
+func ComputePhi(eps float64, x [][3]float64, phi []float64,
+	rvir, nvir float64) {
+
     cm := CenterOfMass(x)
 
 	scale := rvir
@@ -144,7 +229,7 @@ func ComputePhi(x [][3]float64, phi []float64, rvir, nvir float64) {
     }
 
     tree := gravitree.NewTree(x)
-    tree.Potential(Epsilon * scale, phi)
+    tree.Potential(eps * scale, phi)
 
     for i := range phi {
 		phi[i] /= nvir

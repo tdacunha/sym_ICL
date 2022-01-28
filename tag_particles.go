@@ -15,13 +15,16 @@ import (
 )
 
 var (
+	HRLevel = 1
+
+	/*
 	MaxSnap = 235
 	Blocks = 8
-	HRLevel = 1
 	
 	SnapshotFormat = "/scratch/users/enadler/Halo416/output/snapshot_%03d.%d"
 	MergerFileName = "/oak/stanford/orgs/kipac/users/phil1/simulations/MWest/Halo416/mergers.dat"
 	OutputFormat = "/oak/stanford/orgs/kipac/users/phil1/simulations/MWest/Halo416/particles/ids.%d"
+*/
 )
 
 // HaloTrack contains the evolution history of a single halo.
@@ -31,13 +34,14 @@ type HaloTrack struct {
 
 func main() {
     if len(os.Args) != 2 {
-        panic(fmt.Sprintf("You must supply a file with tree names, " +
-            "output names, and z=0 MW IDs"))
+        panic("You must supply a file with (1) block numbers, " + 
+			"(2) snapshot formats, (3) merger file name, (4) output formats.")
     }
 
 	inputName := os.Args[1]
 	blocks, snapFmts, mergerNames, outFmts := ParseInputFile(inputName)
 	for i := range blocks {
+		log.Println("Analyzing halo", i)
 		AnalyzeHalo(blocks[i], snapFmts[i], mergerNames[i], outFmts[i])
 	}
 }
@@ -77,24 +81,28 @@ func ParseInputFile(fname string) (blocks []int, snapFmts,
 		blocks = append(blocks, blockNum)
 		
 		snapFmts = append(snapFmts, cols[1])
-		mergerNames = append(snapFmts, cols[2])
-		outFmts = append(snapFmts, cols[3])
+		mergerNames = append(mergerNames, cols[2])
+		outFmts = append(outFmts, cols[3])
 	}
 	
 	return blocks, snapFmts, mergerNames, outFmts
 }
 
 func AnalyzeHalo(blocks int, snapFmt, mergerName, outFmt string) {
+	log.Println("Blocks:", blocks)
+	log.Println("SnapshotFormat:", snapFmt)
+	log.Println("MergerFileName:", mergerName)
+	log.Println("OutputFormat:", outFmt)
 	mergers := lib.ReadMergers(mergerName)
-	nHaloes := len(mergers.Mvir)
-	ids := InitIDs(nHaloes)
+
+	ids := InitIDs(mergers.Haloes)
 
 	// .____.
-	tracks := make([]HaloTrack, nHaloes)
+	tracks := make([]HaloTrack, mergers.Haloes)
 	for i := range tracks {
 		x := [3][]float32{  }
 		for k := 0; k < 3; k++ {
-			x[k] = make([]float32, nHaloes)
+			x[k] = make([]float32, mergers.Snaps)
 			for j := range x[k] {
 				x[k][j] =  mergers.X[i][j][k]
 			}
@@ -105,7 +113,7 @@ func AnalyzeHalo(blocks int, snapFmt, mergerName, outFmt string) {
 		}
 	}
 
-	for snap := 0; snap <= MaxSnap; snap++ {
+	for snap := 0; snap < len(mergers.Mvir[0]); snap++ {
 		log.Printf("    Snap %d", snap)
 		runtime.GC()
 		

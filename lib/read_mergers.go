@@ -14,6 +14,7 @@ const (
 
 type Mergers struct {
 	Haloes, Snaps int
+	Index []int32
 	// left index goes over haloes, right goes over snapshots.
 	Mvir, Rvir, Vmax [][]float32
 	ID [][]int32
@@ -72,12 +73,15 @@ func ReadMergers(fname string) *Mergers {
 
 	m := &Mergers{ }
 	nh32, ns32 := int32(0), int32(0)
-	binaryRead(f, nh32)
-	binaryRead(f, ns32)
-	nh, ns := int(nh32 + 1), int(ns32)
+	binaryRead(f, &ns32)
+	binaryRead(f, &nh32)
+	nh, ns := int(nh32), int(ns32)
 	m.Haloes, m.Snaps = nh, ns
 
 	a := ScaleFactors(ScaleMin, ScaleMax, ns)
+
+	m.Index = make([]int32, nh)
+	binaryRead(f, m.Index)
 
 	m.Mvir = make([][]float32, nh)
 	m.Rvir = make([][]float32, nh)
@@ -94,7 +98,7 @@ func ReadMergers(fname string) *Mergers {
 			}
 		}
 	}
-	
+
 	m.Vmax = make([][]float32, nh)
 	for i := 0; i < nh; i++ {
 		m.Vmax[i] = make([]float32, ns)

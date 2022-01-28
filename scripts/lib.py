@@ -185,7 +185,7 @@ def read_mergers(dir_name):
     n_merger = struct.unpack("i", f.read(4))[0]
 
     idx = np.fromfile(f, np.int32, n_merger)    
-    out = np.zeros((n_merger+1, n_snap), dtype=MERGER_DTYPE)
+    out = np.zeros((n_merger, n_snap), dtype=MERGER_DTYPE)
     a = scale_factors()
     
     for i in range(n_merger):
