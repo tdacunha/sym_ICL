@@ -1,19 +1,27 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import palette
-from palette import pc
+try:
+    import palette
+    from palette import pc
+    palette.configure(False)
+except:
+    pc = lambda x: x
 import array
 import struct
 import scipy.stats as stats
 import matplotlib as mpl
 import sys
+import lib
 sys.path.append("/home/users/phil1/code/src/github.com/phil-mansfield/read_gadget")
 import read_gadget
+import sys
 
-g2_file_fmt = "/scratch/users/enadler/Halo416/output/snapshot_%03d.%d"
-p_file_fmt = "/scratch/users/phil1/lmc_ges_tracking/Halo416/part_%03d.%d"
-id_file_fmt = "/scratch/users/phil1/lmc_ges_tracking/Halo416/ids.%d"
-tracks_file = "/scratch/users/phil1/lmc_ges_tracking/Halo416/halo_tracks.txt"
+halo = sys.argv[1]
+start_snap = 0
+base_dir = "/oak/stanford/orgs/kipac/users/phil1/simulations/MWest/Halo%s"%halo
+p_file_fmt = "%s/particles/part_%%03d.%%d" % base_dir
+id_file_fmt = "%s/particles/ids.%%d" % base_dir
+mergers_file = "%s/mergers.dat" % base_dir
 mp = 2.81981e5
 
 def tracks_to_halo(tracks):
@@ -134,6 +142,7 @@ def plot_halo_radius(fig, ax, i, mw_h, lmc_h, ges_h,
     extent = [-rmax, rmax, -rmax, rmax]
     gridsize = 100
     vmin, vmax = 5, 1e4
+
     ax_xy1.hexbin(x_lmc[:,0], x_lmc[:,1], gridsize=gridsize, cmap="Greys",
                   bins="log", extent=extent, vmin=vmin, vmax=vmax)
     ax_xy1.plot(x_lmc[lmc_core,0], x_lmc[lmc_core,1],
@@ -167,7 +176,7 @@ def plot_halo_radius(fig, ax, i, mw_h, lmc_h, ges_h,
 
     ax_xy2.set_title(r"$a(z) = %.3f$" % scale[i])
 
-    fig.savefig("../plots/Halo416//halo_radius.%d.png" % i)
+    fig.savefig("../plots/Halo%s//halo_radius.%d.png" % (halo, i))
 
     ax_xy1.clear()
     ax_xz1.clear()
@@ -236,12 +245,12 @@ def plot_vrms(ax, c, x, v, rmax, scale):
     ax.plot(mid[ok], vrms[ok], c=c)
     ax.set_ylim(0, 400)
 
-def get_mw_particles(x0, r0, i):
-    for b in range(8):
-        file_name = g2_file_fmt % (i, b)
-        f = read_gadget.Gadget2Zoom(file_name, ["x", "v", "id32"])
-        
-    return None, None
+#def get_mw_particles(x0, r0, i):
+#    for b in range(8):
+#        file_name = g2_file_fmt % (i, b)
+#        f = read_gadget.Gadget2Zoom(file_name, ["x", "v", "id32"])
+#        
+#    return None, None
 
 def plot_profiles(fig, ax, i, mw_h, lmc_h, ges_h, lmc_rank, ges_rank):
     ((ax_rho1, ax_rho2), (ax_vrms1, ax_vrms2)) = ax
@@ -296,19 +305,20 @@ def plot_profiles(fig, ax, i, mw_h, lmc_h, ges_h, lmc_rank, ges_rank):
     ax_vrms1.set_xlabel(r"$\log_{10}(r_{\rm MW})\,({\rm pMpc})$")
     ax_vrms2.set_xlabel(r"$\log_{10}(r_{\rm sub})\,({\rm pMpc})$")
 
-    fig.savefig("../plots/Halo416/profiles.%d.png" % i)
+    fig.savefig("../plots/Halo%s/profiles.%d.png" % (halo, i))
     ax_rho1.clear()
     ax_rho2.clear()
     ax_vrms1.clear()
     ax_vrms2.clear()
 
 def main():
-    palette.configure(False)
-
-    tracks = np.loadtxt(tracks_file).T
-    mw_h = tracks_to_halo(tracks[0:7])
-    lmc_h = tracks_to_halo(tracks[7:14])
-    ges_h = tracks_to_halo(tracks[14:21])
+    idx, mergers = lib.read_mergers(base_dir)
+    print(idx)
+    mw_h, lmc_h, ges_h = mergers[0], mergers[1], mergers[2]
+    #tracks = np.loadtxt(tracks_file).T
+    #mw_h = tracks_to_halo(tracks[0:7])
+    #lmc_h = tracks_to_halo(tracks[7:14])
+    #ges_h = tracks_to_halo(tracks[14:21])
 
     mw_rank = phi_ranks(mw_h, 0)
     lmc_rank = phi_ranks(lmc_h, 1)
@@ -317,7 +327,7 @@ def main():
     pix = 1024
     dpi = pix/16
     fig_part, ax_part = plt.subplots(2, 3, sharex=True, sharey=False,
-                                     figsize=(3*(pix+17)/2/dpi, (pix+20)/dpi), dpi=dpi)
+                                     figsize=(3*pix/2/dpi, pix/dpi), dpi=dpi)
     fig_prof, ax_prof= plt.subplots(2, 2, sharex=True, sharey=False,
                                     figsize=(pix/dpi, pix/dpi), dpi=dpi)
 
@@ -326,8 +336,8 @@ def main():
     ges_h["v"] -= mw_h["v"]
     lmc_h["v"] -= mw_h["v"]
 
-    for i in range(0, 236):
-        print(i)
+    for i in range(start_snap, 236):
+        print("snap", i)
         plot_halo_radius(
             fig_part, ax_part, i, mw_h, lmc_h, ges_h,
             mw_rank, lmc_rank, ges_rank
