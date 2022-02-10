@@ -327,11 +327,22 @@ def filter_group_idxs(pristine, group_idxs):
         if ok[i]:
             out.append(group_idxs[i])
     return out
+
+def print_table(file_name, names, xs):
+    with open(file_name, "w+") as f:
+        for i in range(len(names)):
+            print("# %s" % names[i], file=f)
             
+        for i in range(len(xs)):
+            for j in range(len(xs[i])):
+                print(xs[i][j], end=" ", file=f)
+            print(file=f)
+
 def main():
     palette.configure(False)
 
-    np_cutoffs = [0, 30, 100, 300, 1000]
+    np_cutoffs = [30, 100, 300, 1000]
+    np_colors = [pc("r"), pc("g"), pc("b"), pc("p")]
     colors = [pc("r"), pc("o"), pc("g"), pc("b"), pc("p")]
 
     t_names = ["0", "2", "4", "6", "8"]
@@ -392,13 +403,13 @@ def main():
 
         plt.figure(0)
         for i in range(len(np_cutoffs)):
-            plt.plot(t_centers, f_surv_i[i,:], colors[i],
+            plt.plot(t_centers, f_surv_i[i,:], np_colors[i],
                      label=r"$N_{\rm vir,min} = %d$" % np_cutoffs[i])
-
+            
         plt.figure(1)
         plt.plot(t_centers, x_lop_i, pc("r"), label=r"$\vec{x}$")
         plt.plot(t_centers, L_lop_i, pc("b"), label=r"$\vec{L}$")
-
+        
         plt.figure(2)
         for i in range(len(x_hists)):
             x_norm = normalize_pair_counts(theta, x_hists_i[i,:])
@@ -461,27 +472,45 @@ def main():
     L_lop /= n_pair_tot
         
     plt.figure(0)
+    tab_names, tab_values = ["t/t_orbit"], [t_centers]
     for i in range(len(np_cutoffs)):
-        plt.plot(t_centers, f_surv[i,:], colors[i],
+        plt.plot(t_centers, f_surv[i,:], np_colors[i],
                  label=r"$N_{\rm vir,min} = %d$" % np_cutoffs[i])
+        tab_names.append("f_survive (Nmin = %d)" % np_cutoffs[i])
+        tab_values.append(f_surv[i,:])
 
+    print_table("tables/f_surv_all.txt", tab_names, tab_values)
+        
     plt.figure(1)
     plt.plot(t_centers, x_lop, pc("r"), label=r"$\vec{x}$")
     plt.plot(t_centers, L_lop, pc("b"), label=r"$\vec{L}$")
 
+    tab_names = [t_centers, x_lop, L_lop]
+    tab_values = ["t/t_orbit", "<theta>_x", "<theta>_L"] 
+    print_table("tables/lopsidedness_all.txt", tab_names, tab_values)
+    
     plt.figure(2)
+    tab_names, tab_values = ["theta"], [theta]
     for i in range(len(x_hists)):
         x_norm = normalize_pair_counts(theta, x_hists[i,:])
         plt.plot(theta, x_norm, colors[i],
                  label=(r"$t - t_{\rm infall} = %s\,t_{\rm orbit}$" %
                         t_names[i]))
-
+        tab_names.append("P(theta)/P_iso(theta) (x; t/t_orbit = %s)" %
+                         t_names[i])
+        tab_values.append(x_norm)
+    print_table("tables/x_hist_all.txt", tab_names, tab_values)
+        
     plt.figure(3)
+    tab_names, tab_values = ["theta"], [theta]
     for i in range(len(L_hists)):
         L_norm = normalize_pair_counts(theta, L_hists[i,:])
         plt.plot(theta, L_norm, colors[i],
                  label=(r"$t - t_{\rm infall} = %s\,t_{\rm orbit}$" %
                         t_names[i]))
+        tab_names.append("P(theta)/P_iso(theta) (L) (t/t_orbit = %s)" % t_names[i])
+        tab_values.append(x_norm)
+    print_table("tables/L_hist_all.txt", tab_names, tab_values)
             
     plt.figure(0)
     plt.ylabel(r"$f_{\rm survive} (N_{\rm vir} > N_{\rm vir,min})$")
