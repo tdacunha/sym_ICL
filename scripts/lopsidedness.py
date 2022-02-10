@@ -14,16 +14,18 @@ cosmo = cosmology.setCosmology("chinchilla",
                                {"flat": True, "H0": 70, "Om0": 0.286,
                                 'Ob0': 0.049, 'sigma8': 0.82, 'ns': 0.96})
 
-DIR_FORMAT = "/oak/stanford/orgs/kipac/users/phil1/simulations/MWest/Halo%03d"
-HALO_NUMS = [4, 113, 169, 170, 222, 229, 282, 327, 349, 407, 453, 523, 625,
-             659, 666, 719, 747, 756, 788, 858, 953, 975, 983]
-#DIR_FORMAT = "../tmp_data/Halo%03d"
-#HALO_NUMS = [4]
+#DIR_FORMAT = "/oak/stanford/orgs/kipac/users/phil1/simulations/MWest/Halo%03d"
+#HALO_NUMS = [4, 113, 169, 170, 222, 229, 282, 327, 349, 407, 453, 523, 625,
+#             659, 666, 719, 747, 756, 788, 858, 953, 975, 983]
+DIR_FORMAT = "../tmp_data/Halo%03d"
+HALO_NUMS = [4, 282]
 DIR_NAMES = [DIR_FORMAT % n for n in HALO_NUMS]
 MP = 2.8e5
 MVIR_CONV = MP * 300
 HIST_BINS = 50
 TIME_BINS = 40
+
+TARGET_IDX = -1
 
 def calc_lopsidedness(dx):
     if len(dx) <= 1: return 0
@@ -39,6 +41,9 @@ def pair_counts(dx, bins):
     bin_idx = np.array(bins*theta/np.pi, dtype=int)
     angle_edges = np.linspace(0, np.pi, bins+1)
     angles = (angle_edges[1:] + angle_edges[:-1])/2
+
+    bin_idx[bin_idx < 0] = 0
+    bin_idx[bin_idx >= bins] = bins - 1  
     
     return (angles, np.bincount(bin_idx, minlength=bins))
 
@@ -63,7 +68,6 @@ def cr_pair_counts(dx, dv, bins):
 
 def normalize_pair_counts(theta, n):
     d_theta = theta[1] - theta[0]
-    #return n / (d_theta * np.sum(n) * np.sin(theta))
     return (2*n) / (np.sum(n) * d_theta * np.sin(theta))
 
 def unique_index_pairs(n):
@@ -74,6 +78,8 @@ def unique_index_pairs(n):
 
 def angle_between(x1, x2):
     scaled_dot = multi_dot(x1, x2) / np.sqrt(r_squared(x1)*r_squared(x2))
+    scaled_dot[scaled_dot > 1] = 1
+    scaled_dot[scaled_dot < -1] = -1
     return np.arccos(scaled_dot)
 
 def r_squared(dx):
@@ -124,7 +130,7 @@ def collect_indices(idx, cent_idx):
 
     return out_bins
 
-def collect_by_snap(snap, start, end, idx, snap_start):
+def collect_by_snap(snap, start, end, idx, snap_start):    
     snap_low = np.zeros(len(idx), dtype=int)
     snap_high = np.zeros(len(idx), dtype=int)
     for i in range(len(idx)):
@@ -142,9 +148,9 @@ def collect_by_snap(snap, start, end, idx, snap_start):
         ok = (snap_i >= snap_low) & (snap_i <= snap_high)
 
         b_idx.append(idx[ok])
-        v_idx.append(np.asarray(start[idx] + (snap_i - snap_low),
+        v_idx.append(np.asarray(start[idx] + (snap[start[idx]] - snap_i),
                                 dtype=int)[ok])
-
+        
     return out_snap, b_idx, v_idx
 
 def surviving_fraction(snap, b, m_snap, m_lookup, group_idxs, np_cutoffs, mvir):
@@ -161,21 +167,15 @@ def surviving_fraction(snap, b, m_snap, m_lookup, group_idxs, np_cutoffs, mvir):
     
     for i in range(len(group_idxs)):
         m_idx = np.searchsorted(m_lookup, group_idxs[i][0])
+        if TARGET_IDX != -1 and group_idxs[i][0] != TARGET_IDX: continue
         m_snap_i = m_snap[m_idx]
-
+        
         group_snap, group_b_idx, group_v_idx = collect_by_snap(
             snap, b["start"], b["end"], group_idxs[i], m_snap_i)
         if len(group_snap) == 0: continue
 
         dt = (age[group_snap] - age[m_snap_i]) / t_orbit[m_snap_i]
         n = np.array(list(map(len, group_b_idx)))
-
-        if n[0] > 1000:
-            print("Removing this weirdly well-populated halo??")
-            print(group_idxs[i][0])
-            print(age[m_snap_i], t_orbit[m_snap_i])
-            print(n)
-            continue
 
         for j in range(len(np_cutoffs)):
             mvir_cutoff = MP * np_cutoffs[j]
@@ -214,6 +214,7 @@ def pair_hist(t_low, t_high, snap, b, m_snap, m_lookup, group_idxs, dx, dv):
     
     for i in range(len(group_idxs)):
         m_idx = np.searchsorted(m_lookup, group_idxs[i][0])
+        if TARGET_IDX != -1 and group_idxs[i][0] != TARGET_IDX: continue
         m_snap_i = m_snap[m_idx]
 
         group_snap, group_b_idx, group_v_idx = collect_by_snap(
@@ -224,13 +225,6 @@ def pair_hist(t_low, t_high, snap, b, m_snap, m_lookup, group_idxs, dx, dv):
         n_pairs_i = (n*(n-1))/2
         dt = (age[group_snap] - age[m_snap_i]) / t_orbit[m_snap_i]
         
-        if n[0] > 1000:
-            print("Removing this weirdly well-populated halo??")
-            print(group_idxs[i][0])
-            print(age[m_snap_i], t_orbit[m_snap_i])
-            print(n)
-            continue
-
         x_hists_i = np.zeros((len(dt), hist_bins))
         L_hists_i = np.zeros((len(dt), hist_bins))
         
@@ -249,7 +243,7 @@ def pair_hist(t_low, t_high, snap, b, m_snap, m_lookup, group_idxs, dx, dv):
 
     return theta, x_hists, L_hists
 
-def lopsidedness(snap, b, m_snap, m_lookup, group_idxs, dx, dv):
+def lopsidedness(id, snap, b, m_snap, m_lookup, group_idxs, dx, dv):
     t_min, t_max, t_bins_num = 0, 10, TIME_BINS
     t_bins = np.linspace(t_min, t_max, t_bins_num+1)
     t_hist = np.zeros(t_bins_num)
@@ -264,6 +258,7 @@ def lopsidedness(snap, b, m_snap, m_lookup, group_idxs, dx, dv):
     
     for i in range(len(group_idxs)):
         m_idx = np.searchsorted(m_lookup, group_idxs[i][0])
+        if TARGET_IDX != -1 and  group_idxs[i][0] != TARGET_IDX: continue
         m_snap_i = m_snap[m_idx]
 
         group_snap, group_b_idx, group_v_idx = collect_by_snap(
@@ -273,24 +268,18 @@ def lopsidedness(snap, b, m_snap, m_lookup, group_idxs, dx, dv):
         n = np.array(list(map(len, group_b_idx)))
         n_pairs_i = (n*(n-1))/2
         dt = (age[group_snap] - age[m_snap_i]) / t_orbit[m_snap_i]
-        
-        if n[0] > 1000:
-            print("Removing this weirdly well-populated halo??")
-            print(group_idxs[i][0])
-            print(age[m_snap_i], t_orbit[m_snap_i])
-            print(n)
-            continue
-        
+
         x_lop_i, L_lop_i = np.zeros(len(dt)), np.zeros(len(dt))
         for j in range(len(x_lop_i)):
             dx_j, dv_j = dx[group_v_idx[j]], dv[group_v_idx[j]]
+            id_j = id[group_v_idx[j]]
             L_j = np.cross(dx_j, dv_j)
             x_lop_i[j] = calc_lopsidedness(dx_j)
             L_lop_i[j] = calc_lopsidedness(L_j)
             
         n_pairs_hist, t_edges, _ = stats.binned_statistic(
             dt, n_pairs_i, "sum", bins=t_bins)
-
+        
         def safe_mean(x):
             if len(x) == 0: return 0
             return np.mean(x)
@@ -363,26 +352,31 @@ def main():
 
         m_idx, m = lib.read_mergers(dir_name)
         b = lib.read_branches(dir_name)
-        x, v, mvir, snap = lib.read_tree(dir_name, ["X", "V", "Mvir", "Snap"])
+        id, x, v, mvir, snap = lib.read_tree(
+            dir_name, ["ID", "X", "V", "Mvir", "Snap"])
         mpeak = get_mpeak(b, mvir)
         mw_idx, mw = m_idx[0], m[0]
+
+        print(m_idx)
         
         dx = x - m[0]["x"][snap]
         dv = v - m[0]["v"][snap]
-        
-        pristine = lib.pristine_merger_indices(b)
+
         propagate_parent_idxs(b["preprocess"])
+        pristine = lib.pristine_merger_indices(b)
         
+        # Remember, this only returns results for pristine haloes.
         _, m_snap, ratio = lib.merger_stats(b, m, x, mvir, snap)
+        
         group_idxs = collect_indices(
             np.asarray(b["preprocess"], dtype=int), mw_idx)
-        group_idxs = filter_group_idxs(pristine, group_idxs)
-                    
+        group_idxs = filter_group_idxs(pristine, group_idxs)        
+        
         t_centers, f_surv_i, n_sat_tot_i = surviving_fraction(
             snap, b, m_snap, pristine, group_idxs, np_cutoffs, mvir)
         
         t_centers, x_lop_i, L_lop_i, n_pair_tot_i = lopsidedness(
-            snap, b, m_snap, pristine, group_idxs, dx, dv)
+            id, snap, b, m_snap, pristine, group_idxs, dx, dv)
 
         theta, x_hists_i, L_hists_i = pair_hist(
             t_low, t_high, snap, b, m_snap, pristine, group_idxs, dx, dv)
@@ -396,6 +390,71 @@ def main():
         n_sat_tot += n_sat_tot_i
         n_pair_tot += n_pair_tot_i
 
+        plt.figure(0)
+        for i in range(len(np_cutoffs)):
+            plt.plot(t_centers, f_surv_i[i,:], colors[i],
+                     label=r"$N_{\rm vir,min} = %d$" % np_cutoffs[i])
+
+        plt.figure(1)
+        plt.plot(t_centers, x_lop_i, pc("r"), label=r"$\vec{x}$")
+        plt.plot(t_centers, L_lop_i, pc("b"), label=r"$\vec{L}$")
+
+        plt.figure(2)
+        for i in range(len(x_hists)):
+            x_norm = normalize_pair_counts(theta, x_hists_i[i,:])
+            plt.plot(theta, x_norm, colors[i],
+                     label=(r"$t - t_{\rm infall} = %s\,t_{\rm orbit}$" %
+                            t_names[i]))
+
+        plt.figure(3)
+        for i in range(len(L_hists)):
+            L_norm = normalize_pair_counts(theta, L_hists_i[i,:])
+            plt.plot(theta, L_norm, colors[i],
+                     label=(r"$t - t_{\rm infall} = %s\,t_{\rm orbit}$" %
+                            t_names[i]))
+
+        plt.figure(0)
+        plt.ylabel(r"$f_{\rm survive} (N_{\rm vir} > N_{\rm vir,min})$")
+        plt.xlabel(r"$(t - t_{\rm infall}) / t_{\rm orbit}$")
+        plt.legend(loc="upper right", fontsize=16)
+        plt.yscale("log")
+        plt.savefig("../plots/lopsidedness/f_survive_vs_t.%s.png" % halo_name)
+        plt.clf()
+
+        plt.figure(1)
+        plt.ylabel(r"$\langle\theta\rangle\ ({\rm radians})$")
+        plt.xlabel(r"$(t - t_{\rm infall}) / t_{\rm orbit}$")
+        plt.legend(loc="upper right", fontsize=16)
+        lo, hi = plt.xlim()
+        plt.xlim(lo, hi)
+        plt.plot([lo, hi], [np.pi/2]*2, "--", c="k", lw=1.5)
+        plt.savefig("../plots/lopsidedness/lop_vs_t.%s.png" % halo_name)
+        plt.clf()
+
+        plt.figure(2)
+        plt.xlabel(r"$\theta_x$")
+        plt.ylabel(r"$N(\theta_x) / N_{\rm isotropic}(\theta_x)$")
+        plt.legend(loc="upper right", fontsize=16)
+        lo, hi = plt.xlim()
+        plt.xlim(lo, hi)
+        plt.plot([lo, hi], [1]*2, "--", c="k", lw=1.5)
+        plt.ylim(0, None)
+        plt.savefig("../plots/lopsidedness/theta_x_t_hist.%s.png" % halo_name)
+        plt.clf()
+
+        plt.figure(3)
+        plt.xlabel(r"$\theta_L$")
+        plt.ylabel(r"$N(\theta_L) / N_{\rm isotropic}(\theta_L)$")
+        plt.legend(loc="upper right")
+        plt.legend(loc="upper right", fontsize=16)
+        lo, hi = plt.xlim()
+        plt.xlim(lo, hi)
+        plt.plot([lo, hi], [1]*2, "--", c="k", lw=1.5)
+        plt.ylim(0, None)
+        plt.savefig("../plots/lopsidedness/theta_L_t_hist.%s.png" % halo_name)
+        plt.clf()
+            
+        
     for k in range(len(n_sat_tot_i)):
         f_surv[k,:] /= n_sat_tot[k]
     x_lop /= n_pair_tot
@@ -461,6 +520,6 @@ def main():
     plt.ylim(0, None)
     plt.savefig("../plots/lopsidedness/theta_L_t_hist.png")
 
-    
+    plt.show()
     
 if __name__ == "__main__": main()
