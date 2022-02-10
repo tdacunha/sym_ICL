@@ -33,21 +33,29 @@ type HaloTrack struct {
 }
 
 func main() {
-    if len(os.Args) != 2 {
-        panic("You must supply a file with (1) block numbers, " + 
-			"(2) snapshot formats, (3) merger file name, (4) output formats.")
-    }
+	haloIndex := -1
+    if len(os.Args) > 3 {
+        panic("You must supply a file with (1) comovoing force softneign scales, (2) particle masses, (3) block numbers, (4) snapshot formats, (5) merger names, (6) ID-file formats, (7) output formats.")
+    } else if len(os.Args) == 3 {
+		var err error
+		haloIndex, err = strconv.Atoi(os.Args[2])
+		if err != nil { panic(err.Error()) }
+	}
 
 	inputName := os.Args[1]
-	blocks, snapFmts, mergerNames, outFmts := ParseInputFile(inputName)
+	
+	_, _, blocks, snapFmt, mergerName, idFmt, _ :=
+		ParseInputFile(inputName)
+
 	for i := range blocks {
+		if haloIndex != -1 && haloIndex != i { continue }
 		log.Println("Analyzing halo", i)
-		AnalyzeHalo(blocks[i], snapFmts[i], mergerNames[i], outFmts[i])
+		AnalyzeHalo(blocks[i], snapFmt[i], mergerName[i], idFmt[i])
 	}
 }
 
-func ParseInputFile(fname string) (blocks []int, snapFmts,
-	mergerNames, outFmts []string) {
+
+func ParseInputFile(fname string) (eps, mp []float64, blocks []int, snapFmt, mergerName, idFmt, outFmt []string) {
 
 	b, err := ioutil.ReadFile(fname)
 	if err != nil {
@@ -68,24 +76,39 @@ func ParseInputFile(fname string) (blocks []int, snapFmts,
 			}
 		}
 		
-		if len(cols) != 4 {
+		if len(cols) != 7 {
 			panic(fmt.Sprintf("Line %d of %s is '%s', but you need there " +
 				"to be four columns.", i+1, fname, line))
 		}
-		
-		blockNum, err := strconv.Atoi(cols[0])
+
+		epsi, err := strconv.ParseFloat(cols[0], 64)
 		if err != nil {
-			panic(fmt.Sprintf("Could not block number the ID on line %d of " +
+			panic(fmt.Sprintf("Could not parse eps on line %d of " +
 				"%s: %s", i+1, fname, cols[0]))
 		}
-		blocks = append(blocks, blockNum)
+		eps = append(eps, epsi)
+
+		mpi, err := strconv.ParseFloat(cols[1], 64)
+		if err != nil {
+			panic(fmt.Sprintf("Could not parse mp on line %d of " +
+				"%s: %s", i+1, fname, cols[1]))
+		}
+		mp = append(mp, mpi)
+
+		blocki, err := strconv.Atoi(cols[2])
+		if err != nil {
+			panic(fmt.Sprintf("Could not parse block number on line %d of " +
+				"%s: %s", i+1, fname, cols[2]))
+		}
+		blocks = append(blocks, blocki)	
 		
-		snapFmts = append(snapFmts, cols[1])
-		mergerNames = append(mergerNames, cols[2])
-		outFmts = append(outFmts, cols[3])
+		snapFmt = append(snapFmt, cols[3])
+		mergerName = append(mergerName, cols[4])
+		idFmt = append(idFmt, cols[5])
+		outFmt = append(outFmt, cols[6])
 	}
 	
-	return blocks, snapFmts, mergerNames, outFmts
+	return eps, mp, blocks, snapFmt, mergerName, idFmt, outFmt
 }
 
 func AnalyzeHalo(blocks int, snapFmt, mergerName, outFmt string) {
@@ -119,24 +142,41 @@ func AnalyzeHalo(blocks int, snapFmt, mergerName, outFmt string) {
 		
 		dtRead := 0.0
 		dtAdd := 0.0
+		nRead := 0
 
 		for b := 0; b < blocks; b++ {
 			fileName := fmt.Sprintf(snapFmt, snap, b)
 			t1 := time.Now()
 			xp, idp := ReadLevel(fileName, HRLevel)
+			nRead += len(xp)
 			t2 := time.Now()
 			AddIDs(ids, tracks, snap, xp, idp)
 			t3 := time.Now()
-
 			dtAdd += t3.Sub(t2).Seconds()
 			dtRead += t2.Sub(t1).Seconds()
 		}
-		log.Printf("%3d %7d %7d %7d\n", 
-			snap, len(ids[0]), len(ids[1]), len(ids[2]))
-		log.Printf("%5.3f %5.3f\n", dtRead, dtAdd)
+
+		log.Printf("    %5.3f %5.3f\n", dtRead, dtAdd)
 	}
+	sizes := make([]int, len(tracks)) 
+	for i := range sizes { sizes[i] = len(ids[i]) }
+	log.Printf("halo sizes: %d\n", sizes)
 
 	WriteIDs(outFmt, ids)
+}
+
+func BoundingBox(xp [][3]float32) (low, high [3]float32) {
+	low, high = xp[0], xp[0]
+	for i := range xp {
+		for k := 0; k < 3; k++ {
+			if xp[i][k] < low[k] {
+				low[k] = xp[i][k]
+			} else if xp[i][k] > high[k] {
+				high[k] = xp[i][k]
+			}
+		}
+	}
+	return low, high
 }
 
 func InitIDs(n int) []map[int32]int {

@@ -19,30 +19,24 @@ import (
 
 var (
 	HRLevel = 1
-/*
-	MaxSnap = 235
-	Blocks = 8
-	NHaloes = 3
-
-	Epsilon = 0.00017
-	Mp = 2.81981e5
-	
-	SnapshotFormat = "/scratch/users/enadler/Halo416/output/snapshot_%03d.%d"
-	OutputFormat = "/scratch/users/phil1/lmc_ges_tracking/Halo416/part_%03d.%d"
-	IDsFormat = "/scratch/users/phil1/lmc_ges_tracking/Halo416/ids.%d"
-*/
 )
 
 func main() {
-    if len(os.Args) != 2 {
-        panic(fmt.Sprintf("You must supply a file with (1) comovoing force softneign scales, (2) particle masses, (3) block numbers, (4) snapshot formats, (5) merger names, (6) ID-file formats, (7) output formats."))
-    }
+	haloIndex := -1
+    if len(os.Args) > 3 {
+        panic("You must supply a file with (1) comovoing force softneign scales, (2) particle masses, (3) block numbers, (4) snapshot formats, (5) merger names, (6) ID-file formats, (7) output formats.")
+    } else if len(os.Args) == 3 {
+		var err error
+		haloIndex, err = strconv.Atoi(os.Args[2])
+		if err != nil { panic(err.Error()) }
+	}
 
-	inputName := os.Args[1]	
+	inputName := os.Args[1]
 
 	eps, mp, blocks, snapFmt, mergerName, idFmt, outFmt :=
 		ParseInputFile(inputName)
 	for i := range eps {
+		if haloIndex != -1 && haloIndex != i { continue }
 		AnalyzeHalo(eps[i], mp[i], blocks[i], snapFmt[i],
 			mergerName[i], idFmt[i], outFmt[i])
 	}
@@ -75,7 +69,7 @@ func ParseInputFile(fname string) (eps, mp []float64, blocks []int, snapFmt, mer
 				"to be four columns.", i+1, fname, line))
 		}
 		
-		epsi, err := strconv.ParseFloat(cols[i], 64)
+		epsi, err := strconv.ParseFloat(cols[0], 64)
 		if err != nil {
 			panic(fmt.Sprintf("Could not parse eps on line %d of " +
 				"%s: %s", i+1, fname, cols[0]))

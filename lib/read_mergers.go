@@ -1,6 +1,7 @@
 package lib
 
 import (
+	"fmt"
 	"os"
 	"encoding/binary"
 	"math"
@@ -60,7 +61,7 @@ func binaryReadVector(f *os.File, n int) [][3]float32 {
 	out := make([][3]float32, n)
 	for i := range out {
 		for k := 0; k < 3; k++ {
-			out[i][k] = tmp[i + k*n]
+			out[i][k] = tmp[3*i + k]
 		}
 	}
 	return out
@@ -82,6 +83,8 @@ func ReadMergers(fname string) *Mergers {
 
 	m.Index = make([]int32, nh)
 	binaryRead(f, m.Index)
+
+	fmt.Println(m.Index)
 
 	m.Mvir = make([][]float32, nh)
 	m.Rvir = make([][]float32, nh)
@@ -111,9 +114,14 @@ func ReadMergers(fname string) *Mergers {
 		binaryRead(f, m.ID[i])
 	}
 
+	off, _ := f.Seek(0, 1)
+	fmt.Println(off)
 	m.X = make([][][3]float32, nh)
 	for i := 0; i < nh; i++ {
 		m.X[i] = binaryReadVector(f, ns)
+		if i == 0 {
+			fmt.Printf("%.3f\n", m.X[i][len(m.X[i]) - 1])
+		}
 	}
 
 	m.V = make([][][3]float32, nh)

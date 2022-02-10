@@ -91,6 +91,7 @@ func WriteHeader(snaps int32, mIdx []int32, out *os.File) {
 	if err != nil { panic(err.Error()) }
 	err = binary.Write(out, lib.ByteOrder, int32(len(mIdx)))
 	if err != nil { panic(err.Error()) }
+	fmt.Println(mIdx)
 	err = binary.Write(out, lib.ByteOrder, mIdx)
 	if err != nil { panic(err.Error()) }
 }
@@ -136,11 +137,13 @@ func WriteVector(files []*os.File, b *lib.Branches, n int,
 
 	for k, i := range mIdx {
 		xi := x[b.Starts[i]: b.Ends[i]]
+		
 		xFlat := make([][3]float32, MaxSnap+1)
 		for j := range xFlat { xFlat[j] = [3]float32{ -1, -1, -1 } }
 		for j := range xi {
 			xFlat[snaps[k][j]] = xi[j]
 		}
+
 		binary.Write(out, lib.ByteOrder, xFlat)
 	}
 }
