@@ -65,9 +65,13 @@ def main():
         halo_name = dir_name.split("/")[-1]
         print(halo_name)
 
+        print("read_mergers")
         m_idx, m = lib.read_mergers(dir_name)
+        print("read_branches")
         b = lib.read_branches(dir_name)
+        print("read_tree")
         x, mvir, snap = lib.read_tree(dir_name, ["X", "Mvir", "Snap"])
+        print("analysis")
         mpeak = get_mpeak(b, mvir)
         mw = m[0]
 
@@ -110,10 +114,10 @@ def main():
         sub_counts[i] = len(trj_r)
             
         plt.figure(2*i)
-        for j in range(len(trj_t)):
-            plt.plot(trj_t[j], trj_m[j], lw=1, alpha=0.25, c="k")
+        #for j in range(len(trj_t)):
+        #    plt.plot(trj_t[j], trj_m[j], lw=1, alpha=0.1, c="k")
 
-        plot_contour(t_all, m_all, pc("r"), (-1.5, 1.5), 20)
+        plot_contour(t_all, m_all, pc("r"), (-1.5, 1.5), 51)
         
         plt.title(r"$%.2f< \log_{10}(M_{\rm sub}/M_{\rm host}) <%.2f$" %
                   (low, high))
@@ -123,13 +127,13 @@ def main():
         plt.ylim(-2, 0)
         plt.plot([0, 0], [-2, 0], "--", c="k")
 
-        plt.savefig("../plots/merger_stack_m_%d.png")
+        plt.savefig("../plots/merger_stack_m_%d.png" % i)
         
         plt.figure(2*i + 1)
-        for j in range(len(trj_t)):
-            plt.plot(trj_t[j], trj_r[j], lw=1, alpha=0.25, c="k")
+        #for j in range(len(trj_t)):
+        #    plt.plot(trj_t[j], trj_r[j], lw=1, alpha=0.25, c="k")
 
-        plot_contour(t_all, r_all, pc("b"), (-1.5, 1.5), 20)
+        plot_contour(t_all, r_all, pc("b"), (-1.5, 1.5), 51)
         
         plt.title(r"$%.2f< r/R_{\rm host} <%.2f$" %
                   (low, high))
@@ -139,7 +143,7 @@ def main():
         plt.ylim(0, 5)
         plt.plot([0, 0], [0, 5], "--", c="k")
 
-        plt.savefig("../plots/merger_stack_m_%d.png")
+        plt.savefig("../plots/merger_stack_r_%d.png" % i)
 
     #plt.show()
 

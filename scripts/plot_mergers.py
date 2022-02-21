@@ -21,6 +21,7 @@ def mvir_to_rvir(mvir, a, omega_M):
 
     return r_cmov
 
+
 def plot_circle(ax, x, y, r, lw=1.5, c="k"):
     theta = np.linspace(0, 2*np.pi, 200)
     xc = r*np.sin(theta)
