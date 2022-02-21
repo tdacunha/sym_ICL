@@ -12,8 +12,6 @@ import scipy.stats as stats
 import matplotlib as mpl
 import sys
 import lib
-sys.path.append("/home/users/phil1/code/src/github.com/phil-mansfield/read_gadget")
-import read_gadget
 import sys
 
 halo = sys.argv[1]

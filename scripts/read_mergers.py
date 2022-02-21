@@ -33,6 +33,7 @@ def read_mergers(fname):
         id.fromfile(f, n_snap)
         out["id"][i,:] = np.array(id, dtype=int)
 
+    #print(f.seek(0, 1))
     for i in range(n_merger):
         x = array.array("f")
         x.fromfile(f, n_snap*3)
@@ -49,7 +50,6 @@ def read_mergers(fname):
 
 def main():
     h = read_mergers(sys.argv[1])
-    print(h["mvir"][0,:])
-    print(h["mvir"][2,:])
+    print(h["x"][0,:,:])
 
 if __name__ == "__main__": main()

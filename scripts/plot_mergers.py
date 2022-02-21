@@ -38,12 +38,6 @@ def hubble_scaling(z, Omega_m):
     return np.sqrt(Omega_m*(1+z)**3 + Omega_L)
 """
 
-print(mvir_to_rvir(8.31700e+11, 1.0, 0.286))
-print(mvir_to_rvir(4.23000e+06, 0.16572, 0.286))
-#print(mvir_to_rvir2(8.31700e+11, 1.0, 0.286))
-#print(mvir_to_rvir2(4.23000e+06, 0.16572, 0.286))
-exit(0)
-
 def plot_circle(ax, x, y, r, lw=1.5, c="k"):
     theta = np.linspace(0, 2*np.pi, 200)
     xc = r*np.sin(theta)

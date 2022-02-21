@@ -14,11 +14,11 @@ cosmo = cosmology.setCosmology("chinchilla",
                                {"flat": True, "H0": 70, "Om0": 0.286,
                                 'Ob0': 0.049, 'sigma8': 0.82, 'ns': 0.96})
 
-#DIR_FORMAT = "/oak/stanford/orgs/kipac/users/phil1/simulations/MWest/Halo%03d"
-#HALO_NUMS = [4, 113, 169, 170, 222, 229, 282, 327, 349, 407, 453, 523, 625,
-#             659, 666, 719, 747, 756, 788, 858, 953, 975, 983]
-DIR_FORMAT = "../tmp_data/Halo%03d"
-HALO_NUMS = [4, 282]
+DIR_FORMAT = "/oak/stanford/orgs/kipac/users/phil1/simulations/MWest/Halo%03d"
+HALO_NUMS = [4, 113, 169, 170, 222, 229, 282, 327, 349, 407, 453, 523, 625,
+             659, 666, 719, 747, 756, 788, 858, 953, 975, 983]
+#DIR_FORMAT = "../tmp_data/Halo%03d"
+#HALO_NUMS = [4, 282]
 DIR_NAMES = [DIR_FORMAT % n for n in HALO_NUMS]
 MP = 2.8e5
 MVIR_CONV = MP * 300
@@ -509,7 +509,7 @@ def main():
                  label=(r"$t - t_{\rm infall} = %s\,t_{\rm orbit}$" %
                         t_names[i]))
         tab_names.append("P(theta)/P_iso(theta) (L) (t/t_orbit = %s)" % t_names[i])
-        tab_values.append(x_norm)
+        tab_values.append(L_norm)
     print_table("tables/L_hist_all.txt", tab_names, tab_values)
             
     plt.figure(0)
