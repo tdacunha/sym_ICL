@@ -3,6 +3,7 @@ package lib
 import (
 	"math"
 	"os"
+	"fmt"
 	"encoding/binary"
 )
 
@@ -242,7 +243,7 @@ func WriteVector(
 }
 
 // ReadVector reads the floats associated with a given halo.
-func ReadVector(baseDir string, varName string,
+func ReadVector(baseDir, varName string,
 	snap int, hd *ParticleHeader) [][][3]float32 {
 	
 	order := binary.LittleEndian
@@ -251,9 +252,17 @@ func ReadVector(baseDir string, varName string,
 	x := make([][][3]float32, hd.NHalo)
 	
 	for iFile := 0; iFile < int(hd.NFile); iFile++ {
-		f, err := os.Open(TagFileName(baseDir, iFile))
+		f, err := os.Open(VarFileName(baseDir, varName, snap, iFile))
 		if err != nil { panic(err.Error()) }
 
+		code := int32(-1)
+		err = binary.Read(f, order, &code)
+		if code != VectorVarCode {
+			panic(fmt.Sprintf("%s is not vector variable file.",
+				VarFileName(baseDir, varName, snap, i)))
+		}
+
+		
 		xi := make([][3]float32, hd.FileLengths[iFile])
 		
 		err = binary.Read(f, order, xi)
@@ -290,7 +299,7 @@ func WriteFloat(
 		f, err := os.Create(VarFileName(baseDir, varName, snap, iFile))
 		if err != nil { panic(err.Error()) }
 		
-		err = binary.Write(f, order, int32(VectorVarCode))
+		err = binary.Write(f, order, int32(FloatVarCode))
 		if err != nil { panic(err.Error()) }
 		
 		for ; j < len(x) && totalLen < (iFile+1)*nPerFile; j++{
@@ -314,8 +323,15 @@ func ReadFloat(baseDir string, varName string,
 	x := make([][]float32, hd.NHalo)
 	
 	for iFile := 0; iFile < int(hd.NFile); iFile++ {
-		f, err := os.Open(TagFileName(baseDir, iFile))
+		f, err := os.Open(VarFileName(baseDir, varName, snap, iFile))
 		if err != nil { panic(err.Error()) }
+
+		code := int32(-1)
+		err = binary.Read(f, order, &code)
+		if code != FloatVarCode {
+			panic(fmt.Sprintf("%s is not a float variable file.",
+				VarFileName(baseDir, varName, snap, iFile)))
+		}
 
 		xi := make([]float32, hd.FileLengths[iFile])
 		
