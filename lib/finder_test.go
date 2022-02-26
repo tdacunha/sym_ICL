@@ -24,12 +24,34 @@ func TestFinder(t *testing.T) {
 	
 	idx := f.Find([3]float32{100, 100, 100}, 4)
 	if !Int32Eq(idx, idx0) {
-		t.Errorf("expected Find(1) to give %d, but got %d", idx, idx0)
+		t.Errorf("expected Find(1) to give %d, but got %d", idx0, idx)
 	}
 	
-	idx = f.Find([3]float32{100, 100, 100}, 110)
+	idx = f.Find([3]float32{100, 100, 100}, 99)
 	if !Int32Eq(idx, idx1) {
-		t.Errorf("expected Find(1) to give %d, but got %d", idx, idx1)
+		t.Errorf("expected Find(1) to give %d, but got %d", idx1, idx)
+	}
+
+	for i := range x {
+		for k := 0; k < 3; k++ {
+			x[i][k] = (x[i][k] - 50)*2
+		}
+	}
+	x[0] = [3]float32{1, 1, 1}
+	x[1] = [3]float32{199, 199, 199}
+	x = append(x, [3]float32{198, 198, 198})
+
+	f.Reuse(x)
+	idx0 = []int32{ 2, 3, 4, 5 }
+	idx1 = []int32{ 2, 3, 4, 5, 6, 7 }
+
+	idx = f.Find([3]float32{100, 100, 100}, 8)
+	if !Int32Eq(idx, idx0) {
+		t.Errorf("expected Find(1) to give %d, but got %d", idx0, idx)
 	}
 	
+	idx = f.Find([3]float32{100, 100, 100}, 99)
+	if !Int32Eq(idx, idx1) {
+		t.Errorf("expected Find(1) to give %d, but got %d", idx1, idx)
+	}
 }

@@ -17,7 +17,7 @@ func NewGrid(b *Bounds, cells int, width float32, dataLen int) *Grid {
 		Cells: cells,
 		cw:    width / float32(cells),
 		Width: width,
-		Heads: make([]int32, cells*cells*cells),
+		Heads: make([]int32, b.Span[0]*b.Span[1]*b.Span[2]),
 		Next:  make([]int32, dataLen),
 	}
 
@@ -26,6 +26,40 @@ func NewGrid(b *Bounds, cells int, width float32, dataLen int) *Grid {
 	}
 	
 	return g
+}
+
+func (g *Grid) Reuse(b *Bounds, cells int, dataLen int) {
+	newHeads := g.Heads[:0]
+	nHeads := b.Span[0]*b.Span[1]*b.Span[2]
+	newNext := g.Next[:0]
+	
+	if cap(newHeads) > nHeads {
+		newHeads = newHeads[:nHeads]
+	} else {
+		newHeads = newHeads[:cap(newHeads)]
+		newHeads = append(newHeads, make([]int32, nHeads - cap(newHeads))...)
+	}
+
+	if cap(newNext) > dataLen {
+		newNext = newNext[:dataLen]
+	} else {
+		newNext = newNext[:cap(newNext)]
+		newNext = append(newNext, make([]int32, dataLen - cap(newNext))...)
+	}
+	
+	*g = Grid{
+		Bounds: *b,
+		Cells: cells,
+		cw: g.Width / float32(cells),
+		Width: g.Width,
+		Heads: newHeads,
+		Next: newNext,
+	}
+
+	for i := range g.Heads {
+		g.Heads[i] = listEnd
+	}
+	
 }
 
 func (g *Grid) Length(idx int) int {

@@ -1,5 +1,10 @@
 package lib
 
+import (
+	"fmt"
+)
+
+
 const (
 	defaultFinderCells = 100
 )
@@ -49,9 +54,27 @@ func NewFinder(L float32, x [][3]float32) *Finder {
 	return f
 }
 
+// Reuse resuses as much of the internal arrays of f as possible to create a new
+// finder for the input set of positions.
+func (f *Finder) Reuse(x [][3]float32) {
+	b, cells  := getBounds(x, f.g.Width)
+	f.g.Reuse(b, cells, len(x))
+	f.g.Insert(x)
+	
+	f.gBuf = make([]int32, f.g.MaxLength())
+	f.idxBuf = []int32{ }
+	f.x = x
+	f.cells = cells
+}
+
 // FindSubhalos links grid halos (from group A) to a target halo (from group B).
 // Returned array is an internal buffer, so please treat it kindly.
 func (sf *Finder) Find(pos [3]float32, r0 float32) []int32 {
+	if 2*r0 >= sf.g.Width {
+		panic(fmt.Sprintf("Finder cannot do searches with radius %g in a box " +
+			"with width %g.", r0, sf.g.Width))
+	}
+	
 	sf.idxBuf = sf.idxBuf[:0]
 
 	b := &Bounds{}
@@ -119,7 +142,7 @@ func (sf *Finder) addSubhalos(
 		}
 		
 		dr2 := dx*dx + dy*dy + dz*dz
-
+		
 		if dr*dr >= dr2 {
 			sf.idxBuf = append(sf.idxBuf, j)
 		}
