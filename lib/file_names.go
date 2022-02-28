@@ -10,12 +10,20 @@ func ParticleDirName(baseDir string) string {
 	return path.Join(baseDir, "particles")
 }
 
+func HaloDirName(baseDir string) string {
+	return path.Join(baseDir, "haloes")
+}
+
 func SnapDirName(baseDir string, snap int) string {
 	return path.Join(ParticleDirName(baseDir), fmt.Sprintf("snap_%03d", snap))
 }
 
 func ParticleHeaderName(baseDir string) string {
 	return path.Join(ParticleDirName(baseDir), "particle_header.dat")
+}
+
+func MergerFileName(baseDir string) string {
+	return path.Join(HaloDirName(baseDir), "mergers.dat")
 }
 
 func TagDirName(baseDir string) string {

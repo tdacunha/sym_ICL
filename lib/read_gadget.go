@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 )
-
 type Gadget2ZoomFile struct {
 	N, NTot [6]int
 	Mp [6]float64

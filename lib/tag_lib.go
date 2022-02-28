@@ -11,8 +11,8 @@ func PeakIndex(x []float32) int {
 	return iMax
 }
 
-// MPeak returns M_peak given an M_vir history.
-func MPeak(mvir []float32) float32 {
+// Mpeak returns M_peak given an M_vir history.
+func Mpeak(mvir []float32) float32 {
 	return mvir[PeakIndex(mvir)]
 }
 
@@ -94,6 +94,7 @@ func (w *TagWorker) LoadParticles(x [][3]float32) {
 // positions, virial radii, and mpeak values.
 func (w *TagWorker) FindParticleOwners(x [][3]float32, r, mpeak []float32) {
 	for i := int32(0); i < int32(len(x)); i++ {
+		if r[i] == -1 { continue }
 		idx := w.finder.Find(x[i], r[i])
 		for _, j := range idx {
 			if w.Owners[j] == -1 {
@@ -132,26 +133,20 @@ func InsertOwnersInLists(workers []*TagWorker, snap int,
 	}
 }
 
-// NOTE: looking at this, we could actually refactor the code to not keep track
-// of the CompactList.
 
-type HaloParticlesBuffer struct {
-	IDs [][]int32
-	Snaps [][]int16
-	Flags [][]uint8
-}
 
-func NewHaloParticlesBuffer(nHalo int) *HaloParticlesBuffer {
-	return &HaloParticlesBuffer {
+
+func NewTags(nHalo int) *Tags {
+	return &Tags {
 		make([][]int32, nHalo),
 		make([][]int16, nHalo),
 		make([][]uint8, nHalo),
 	}
 }
 
-// CollectHaloParticles adds particles from the two lists which have changed
+// AddChangedParticles adds particles from the two lists which have changed
 // ownership in the current snapshot. ids give the IDs of the particles.
-func (buf *HaloParticlesBuffer) CollectChangedParticles(
+func (buf *Tags) AddChangedParticles(
 	ids []int32, idxList, snapList *CompactList, snap int) {
 
 	snap32, snap16 := int32(snap), int16(snap)
@@ -166,9 +161,9 @@ func (buf *HaloParticlesBuffer) CollectChangedParticles(
 		if idxList.next[idx] != listEnd { flagi = uint8(1) }
 		
 		if snapi == snap32 {
-			buf.IDs[haloi] = append(buf.IDs[haloi], ids[i])
-			buf.Snaps[haloi] = append(buf.Snaps[haloi], snap16)
-			buf.Flags[haloi] = append(buf.Flags[haloi], flagi)
+			buf.Idx[haloi] = append(buf.Idx[haloi], ids[i])
+			buf.Snap[haloi] = append(buf.Snap[haloi], snap16)
+			buf.Flag[haloi] = append(buf.Flag[haloi], flagi)
 		}
 	}
 }
