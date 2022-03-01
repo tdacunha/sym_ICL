@@ -3,9 +3,7 @@ package lib
 import (
 	"encoding/binary"
 	"fmt"
-	"io/ioutil"
 	"os"
-	"path"
 )
 
 var (

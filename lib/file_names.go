@@ -3,6 +3,7 @@ package lib
 import (
 	"path"
 	"fmt"
+	"io/ioutil"
 )
 
 
