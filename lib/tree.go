@@ -27,6 +27,7 @@ var (
 		"BToA": 46,
 		"CToA": 47,
 		"VirialRatio": 56,
+		"RVmax": 60,
 		"X": 17,
 		"V": 20,
 		"J": 23,

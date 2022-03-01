@@ -8,7 +8,7 @@ import os.path as path
 read_mergers(). Positions and distances are in comvoing Mpc/h, velocities are
 physical peculiar velocities, and masses are in Msun/h.
 """
-MERGER_DTYPE = [("id", "i4"), ("mvir", "f4"), ("vmax", "f4"),
+MERGER_DTYPE = [("id", "i4"), ("mvir", "f4"), ("vmax", "f4"), ("rvmax", "f4"),
                 ("x", "f4", (3,)), ("v", "f4", (3,)), ("ok", "?"),
                 ("rvir", "f4")]
 
@@ -57,6 +57,7 @@ TREE_COL_NAMES = {
     "BToA": 46,
     "CToA": 47,
     "VirialRatio": 56,
+    "RVmax": 60,
     "X": 17,
     "V": 20,
     "J": 23,
@@ -158,8 +159,9 @@ def merger_stats(b, m, x, mvir, snap):
         mvir_i = mvir[b["start"][i]: b["end"][i]]
         snap_i = snap[b["start"][i]: b["end"][i]]
         x_i = x[b["start"][i]: b["end"][i]]
+                
         m_snap_i = merger_snap(mw, x_i, snap_i)
-        
+
         m_snap_sub = np.searchsorted(snap_i[::-1], m_snap_i)
         mpeak[j] = np.max(mvir_i)
         m_snap[j] = m_snap_i
@@ -195,6 +197,8 @@ def read_mergers(dir_name):
         
     for i in range(n_merger):
         out["vmax"][i,:] = np.fromfile(f, np.float32, n_snap)
+    for i in range(n_merger):
+        out["rvmax"][i,:] = np.fromfile(f, np.float32, n_snap)
     for i in range(n_merger):
         out["id"][i,:] = np.fromfile(f, np.int32, n_snap)
     for i in range(n_merger):
@@ -260,6 +264,25 @@ def read_tree(dir_name, var_names):
 
         out.append(flatten(var))
     return out
+
+def propagate_parent_idxs(idx):
+    """ propagate_parent_idxs performs a union-find on the array idx so that
+    if subhalo A was preprocessed by B which was preprocessed by C, A's index
+    points to C.
+
+    This is currently brute-force and very slow. There's a well-known union-find
+    algorithm which is faster. Can switch to this if it ever matters, but it's
+    also ~130 lines in my old Julia implementation, so I'm not sure that it's 
+    worht it.
+    """
+    n_changed = -1
+    while n_changed != 0:
+        n_changed = 0
+        for i in range(len(idx)):
+            if idx[i] == i: idx[i] = -1
+            if idx[i] != -1 and idx[[idx[i]]] != -1:
+                n_changed += 1
+                idx[i] = idx[idx[i]]
 
 def read_merger_idxs(dir_name):
     halo_name = dir_name.split("/")[-1]
