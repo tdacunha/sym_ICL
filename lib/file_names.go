@@ -27,10 +27,9 @@ func MergerFileName(baseDir string) string {
 	return path.Join(HaloDirName(baseDir), "mergers.dat")
 }
 
-func BranchesName(baseDir string) string {
+func BranchesFileName(baseDir string) string {
 	return path.Join(HaloDirName(baseDir), "branches.dat")
 }
-
 
 func TreeFileNames(baseDir string) []string {
 	dir := HaloDirName(baseDir)

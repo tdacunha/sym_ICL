@@ -22,8 +22,9 @@ var (
 	DFIDCol = 28
 	// ID, DescID, UPID, Phantom, Snap, NextProg
 	IntCols = []int{ 1, 3, 6, 8, 31, 32 }
-	// Mvir, Rs, Vmax, M200b, M200c, M500c, Xoff, SpinBullock, b/a, c/a, T/U
-	FloatCols = []int{ 10, 12, 16, 39, 40, 41, 43, 45, 46, 47, 56 }
+	// Mvir, Rs, Vmax, M200b, M200c, M500c, Xoff, SpinBullock,
+	// b/a, c/a, T/U, RVmax
+	FloatCols = []int{ 10, 12, 16, 39, 40, 41, 43, 45, 46, 47, 56, 60}
 	// X(3), V(3), J(3), A(3)
 	VectorCols = []int{17, 18, 19, 20, 21, 22, 23, 24, 25, 48, 49, 50 }
 
@@ -46,6 +47,7 @@ var (
 		46: 43,
 		47: 44,
 		56: 53,
+		60: 57, // Should never happen
 		17: 17,
 		18: 18,
 		19: 19,
@@ -63,29 +65,27 @@ var (
 
 // HaloTrack contains the evolution history of a single halo.
 func main() {
-    if len(os.Args) != 2 {
-        panic(fmt.Sprintf("You must supply a file with tree names and " +
-            "output directories"))
-    }
+	haloIndex := -1
+    if len(os.Args) > 3 || len(os.Args) <= 1 {
+        panic("You must provide a config file.")
+    } else if len(os.Args) == 3 {
+		var err error
+		haloIndex, err = strconv.Atoi(os.Args[2])
+		if err != nil { panic(err.Error()) }
+	}
 
 	inputName := os.Args[1]
-	treeDirs, outDirs := ParseInputFile(inputName)
+	cfg := lib.ParseConfig(inputName)
 
-	log.Printf("Running on %d haloes", len(treeDirs))
+	for i := range cfg.BaseDir {
+		if haloIndex != -1 && haloIndex !=  i { continue }
 
-	for i := range treeDirs {
-		MemoryLog()
-		os.MkdirAll(outDirs[i], 0744)
-		ConvertTree(treeDirs[i], outDirs[i])
+		log.Printf("Converting halo %d (%s)", i, cfg.BaseDir[i])
+		lib.MemoryUsage()
+		
+		lib.MaybeMkdir(lib.HaloDirName(cfg.BaseDir[i]))
+		ConvertTree(cfg.TreeDir[i], cfg.BaseDir[i])
 	}
-}
-
-func MemoryLog() {
-	ms := &runtime.MemStats{ }
-	runtime.ReadMemStats(ms)
-	log.Printf("Allocated: %.1f GB In Use: %.1f GB Idle: %.1f GB\n",
-		float64(ms.Alloc) / 1e9, float64(ms.HeapInuse) / 1e9,
-		float64(ms.HeapIdle) / 1e9)
 }
 
 func CountHeaderLines(fileName string) (nLines, nTrees int) {
