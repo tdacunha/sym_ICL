@@ -26,6 +26,29 @@ func MergerFileName(baseDir string) string {
 	return path.Join(HaloDirName(baseDir), "mergers.dat")
 }
 
+func BranchesName(baseDir string) string {
+	return path.Join(HaloDirName(baseDir), "branches.dat")
+}
+
+
+func TreeFileNames(baseDir string) []string {
+	dir := HaloDirName(baseDir)
+	
+	files, err := ioutil.ReadDir(dir)
+	if err != nil { panic(err.Error()) }
+	
+	out := []string{ }
+	for i := range files {
+		name := files[i].Name()
+		if len(name) >= 7 &&
+			name[len(name)-7:] == ".df.bin" {
+			out = append(out, path.Join(dir, name))
+		}
+	}
+
+	return out
+}
+
 func TagDirName(baseDir string) string {
 	return path.Join(ParticleDirName(baseDir), "tags")
 }

@@ -97,26 +97,6 @@ func ReadTreeVar(f *os.File, varName string, buf interface{}) {
 	if err != nil { panic(err.Error()) }
 }
 
-func BranchesName(dir string) string {
-	return path.Join(dir, "branches.dat")
-}
-
-func TreeFileNames(dir string) []string {
-	files, err := ioutil.ReadDir(dir)
-	if err != nil { panic(err.Error()) }
-	
-	out := []string{ }
-	for i := range files {
-		name := files[i].Name()
-		if len(name) >= 7 &&
-			name[len(name)-7:] == ".df.bin" {
-			out = append(out, path.Join(dir, name))
-		}
-	}
-
-	return out
-}
-
 func TreeNTot(files []*os.File) int {
 	nTot := 0
 	for i := range files {
