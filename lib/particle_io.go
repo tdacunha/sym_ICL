@@ -119,8 +119,8 @@ func ReadTags(baseDir string, hd *ParticleHeader) *Tags {
 // particles entered that halo, and flags is flags containing information about
 // the particle.
 func WriteTags(baseDir string, nFiles int, tags *Tags) {
-	maybeMkdir(ParticleDirName(baseDir))
-	maybeMkdir(TagDirName(baseDir))
+	MaybeMkdir(ParticleDirName(baseDir))
+	MaybeMkdir(TagDirName(baseDir))
 	
 	idxs, snaps, flags := tags.Idx, tags.Snap, tags.Flag
 	
@@ -202,9 +202,9 @@ func fileExists(name string) bool {
 }
 
 // Makes a directory if it doesn't already exist
-func maybeMkdir(name string) {
+func MaybeMkdir(name string) {
 	if fileExists(name) { return }
-	err := os.MkdirAll(name, os.ModePerm)
+	err := os.MkdirAll(name, 0744)
 	if err != nil { panic(err.Error()) }
 }
 
@@ -213,7 +213,7 @@ func maybeMkdir(name string) {
 func WriteVector(
 	baseDir string, nFiles int, varName string, snap int, x [][][3]float32,
 ) {
-	maybeMkdir(SnapDirName(baseDir, snap))
+	MaybeMkdir(SnapDirName(baseDir, snap))
 
 	order := binary.LittleEndian
 
@@ -284,7 +284,7 @@ func ReadVector(baseDir, varName string,
 func WriteFloat(
 	baseDir string, nFiles int, varName string, snap int, x [][]float32,
 ) {
-	maybeMkdir(SnapDirName(baseDir, snap))
+	MaybeMkdir(SnapDirName(baseDir, snap))
 
 	order := binary.LittleEndian
 
