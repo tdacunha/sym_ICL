@@ -21,22 +21,6 @@ def mvir_to_rvir(mvir, a, omega_M):
 
     return r_cmov
 
-"""
-def mvir_to_rvir2(mvir, a, Omega_m):
-    rho_c = 2.77536627e11/
-    
-    vir_thresh = vir_density(a, Omega_m)
-    
-    
-def vir_density(a, Omega_m):
-    z = 1/a - 1
-    x = (Omega_m/a**3) / hubble_scaling(z, Omega_m)**2 - 1
-    return (18*np.pi**2 + 82*x - 39*x**2)/(1 + x)
-
-def hubble_scaling(z, Omega_m):
-    Omega_L = 1 - Omega_m
-    return np.sqrt(Omega_m*(1+z)**3 + Omega_L)
-"""
 
 def plot_circle(ax, x, y, r, lw=1.5, c="k"):
     theta = np.linspace(0, 2*np.pi, 200)
