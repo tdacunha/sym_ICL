@@ -8,7 +8,7 @@ Next, run the following commands to diagnose any early issues (replacing the `/o
 
 ``` ls /oak/stanford/orgs/kipac/users/ycwang19/ZEUS/MWmass_new/Halo*/output/rockstar/trees/ > configs/MW_mass/tree_locations.txt
 du -h /oak/stanford/orgs/kipac/users/ycwang19/ZEUS/MWmass_new/Halo*/output/rockstar/trees/tree_*.dat > configs/MW_mass/tree_sizes.txt
-head -n 1 /oak/stanford/orgs/kipac/users/ycwang19/ZEUS/MWmass_new/Halo*/output/rockstar/trees/tree_0_0_0.dat > MW_mass/tree_headers.txt```
+head -n 1 /oak/stanford/orgs/kipac/users/ycwang19/ZEUS/MWmass_new/Halo*/output/rockstar/trees/tree_0_0_0.dat > MW_mass/tree_headers.txt ```
 
 This will create three files that you can browse to diagnose problems. Look through `tree_locations.txt` and see if there are any simulations which don't have tree files yet: these would be jobs that haven't finished running. Look through `tree_sizes.txt` to get a sense for which simulations are going to be time intensive, and check that none of the tree files are suspisciously small. Look through `tree_headers.txt` and confirm that all your simulations used the same version of Rockstar/consistent-trees. 
 
