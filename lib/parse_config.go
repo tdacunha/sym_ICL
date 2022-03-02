@@ -16,6 +16,8 @@ type Config struct {
 	SnapFormat, TreeDir []string
 	// The directory where all the library's files are stored
 	BaseDir []string
+	// Where the MUSIC config file is located
+	MusicConfig []string
 }
 
 // ParseConfig parses a six-column particle-tracking config file. The contents
@@ -42,7 +44,7 @@ func ParseConfig(fname string) *Config {
 			}
 		}
 		
-		if len(cols) != 8 {
+		if len(cols) != 9 {
 			panic(fmt.Sprintf("Line %d of %s is '%s', but you need there " +
 				"to be eight columns.", i+1, fname, line))
 		}
@@ -87,6 +89,7 @@ func ParseConfig(fname string) *Config {
 		cfg.SnapFormat = append(cfg.SnapFormat, cols[5])
 		cfg.TreeDir = append(cfg.TreeDir, cols[6])
 		cfg.BaseDir = append(cfg.BaseDir, cols[7])
+		cfg.MusicConfig = append(cfg.MusicConfig, cols[8])
 	}
 	
 	return cfg
