@@ -8,6 +8,8 @@ func TestParseConfig(t *testing.T) {
 	cfgName := "test_dir/test_config.1.txt"
 	cfg := ParseConfig(cfgName)
 
+	matchID:= []int32{ 9, 8 }
+	matchSnap := []int32{ 99, 88 }
 	eps := []float64{ 1.0, 3.5 }
 	mp := []float64{ 2.0, 5.5 }
 	blocks := []int{ 10, 100 }
@@ -15,6 +17,16 @@ func TestParseConfig(t *testing.T) {
 	treeDir := []string{"b", "bb"}
 	baseDir := []string{"c", "cc"}
 
+	if !Int32Eq(matchID, cfg.MatchID) {
+		t.Errorf("Expected MatchID = %d, got %d",
+			matchID, cfg.MatchID)
+	}
+
+	if !Int32Eq(matchSnap, cfg.MatchSnap) {
+		t.Errorf("Expected MatchSnap = %d, got %d",
+			matchSnap, cfg.MatchSnap)
+	}
+	
 	if !Float64Eq(mp, cfg.Mp) {
 		t.Errorf("Expected Mp = %g, got %g",
 			mp, cfg.Mp)

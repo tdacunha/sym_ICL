@@ -9,6 +9,7 @@ import (
 
 // Config contains all the fields inside a particle-tracking config file.
 type Config struct {
+	MatchID, MatchSnap []int32
 	Eps, Mp []float64
 	Blocks []int
 	// Input directories.
@@ -41,35 +42,51 @@ func ParseConfig(fname string) *Config {
 			}
 		}
 		
-		if len(cols) != 6 {
+		if len(cols) != 8 {
 			panic(fmt.Sprintf("Line %d of %s is '%s', but you need there " +
-				"to be six columns.", i+1, fname, line))
+				"to be eight columns.", i+1, fname, line))
 		}
 
-		eps, err := strconv.ParseFloat(cols[0], 64)
+		matchID, err := strconv.Atoi(cols[0])
+		if err != nil {
+			panic(fmt.Sprintf("Could not parse ID on line %d of " +
+				"%s: %s", i+1, fname, cols[0]))
+		}
+		cfg.MatchID = append(cfg.MatchID, int32(matchID))
+
+
+		matchSnap, err := strconv.Atoi(cols[1])
+		if err != nil {
+			panic(fmt.Sprintf("Could not parse snapshot on line %d of " +
+				"%s: %s", i+1, fname, cols[1]))
+		}
+		cfg.MatchSnap = append(cfg.MatchSnap, int32(matchSnap))
+		
+		
+		eps, err := strconv.ParseFloat(cols[2], 64)
 		if err != nil {
 			panic(fmt.Sprintf("Could not parse eps on line %d of " +
-				"%s: %s", i+1, fname, cols[0]))
+				"%s: %s", i+1, fname, cols[2]))
 		}
 		cfg.Eps = append(cfg.Eps, eps)
 
-		mp, err := strconv.ParseFloat(cols[1], 64)
+		mp, err := strconv.ParseFloat(cols[3], 64)
 		if err != nil {
 			panic(fmt.Sprintf("Could not parse mp on line %d of " +
-				"%s: %s", i+1, fname, cols[1]))
+				"%s: %s", i+1, fname, cols[3]))
 		}
 		cfg.Mp = append(cfg.Mp, mp)
 
-		blocks, err := strconv.Atoi(cols[2])
+		blocks, err := strconv.Atoi(cols[4])
 		if err != nil {
 			panic(fmt.Sprintf("Could not parse block number on line %d of " +
-				"%s: %s", i+1, fname, cols[2]))
+				"%s: %s", i+1, fname, cols[4]))
 		}
 		cfg.Blocks = append(cfg.Blocks, blocks)
 		
-		cfg.SnapFormat = append(cfg.SnapFormat, cols[3])
-		cfg.TreeDir = append(cfg.TreeDir, cols[4])
-		cfg.BaseDir = append(cfg.BaseDir, cols[5])
+		cfg.SnapFormat = append(cfg.SnapFormat, cols[5])
+		cfg.TreeDir = append(cfg.TreeDir, cols[6])
+		cfg.BaseDir = append(cfg.BaseDir, cols[7])
 	}
 	
 	return cfg
