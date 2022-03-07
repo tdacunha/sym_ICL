@@ -95,7 +95,7 @@ def main():
     scale = lib.scale_factors()
 
     # calculate merger stats so we can figure out the infall time.
-    _, merger_snap_short, _ = lib.merger_stats(b, m, x, mvir, snap)
+    _, merger_snap, _ = lib.merger_stats(b, m, x, mvir, snap)
     p_sub_idx = lib.pristine_merger_indices(b)
 
     # Set up buffers for keeping track of mass profiles.
