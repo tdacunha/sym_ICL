@@ -45,8 +45,8 @@ class Nadler2020RHalf(object):
 
     def r_half(self, rvir, z):
         a = 1/(1 + z)
-        log_R = np.log10(self.A * (cvir/10.0)**gamma * (rvir/self.R0)**n)
-        log_scatter = self.sigma_log_R*random.randn(0, 1, shape=np.shape(rvir))
+        log_R = np.log10(self.A * (rvir/self.R0)**self.n)
+        log_scatter = self.sigma_log_R*random.normal(0, 1, size=np.shape(rvir))
         return 10**(log_R + log_scatter) * a * h100
         
 
@@ -123,15 +123,15 @@ class GalaxyHaloModel(object):
         self.r_half_model = r_half_model
         self.profile_model = profile_model
 
-    def set_stellar_masses(self, x0, m0, r0, z0, xp):
-        """ set_stellar_masses sets the stellar masses of a halo's dark matter
+    def set_m_star(self, x0, m0, r0, z0, xp):
+        """ set_m_star sets the stellar masses of a halo's dark matter
         particles. x0 (cMpx/h), m0 (Msun/h), r0 (cMpc/h), and z0 are the
         position, virial mass, virial, radius, and redshift at the chosen
         snapshot. xp (cMpc/h) is the positions of the particles.
         """
         m_star = self.m_star_model.m_star(m0, z0)
         r_half = self.r_half_model.r_half(r0, z0)
-        return self.profile_model(x0, m_star, r_hald, xp)
+        return self.profile_model.set_m_star(x0, m_star, r_half, xp)
         
     
 def density_profile(x0, x, ms):

@@ -197,8 +197,9 @@ def read_mergers(dir_name):
         
     for i in range(n_merger):
         out["vmax"][i,:] = np.fromfile(f, np.float32, n_snap)
-    for i in range(n_merger):
-        out["rvmax"][i,:] = np.fromfile(f, np.float32, n_snap)
+    print("WARNING: merger.dat and lib.py are different versions")
+    #for i in range(n_merger):
+    #    out["rvmax"][i,:] = np.fromfile(f, np.float32, n_snap)
     for i in range(n_merger):
         out["id"][i,:] = np.fromfile(f, np.int32, n_snap)
     for i in range(n_merger):
