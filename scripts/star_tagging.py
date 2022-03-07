@@ -37,7 +37,7 @@ class PlummerProfile(object):
 
     
 class Nadler2020RHalf(object):
-    def __init__(self, A=27e-3*h100, n=1.07, R0=10e-3*h100, sigma_log_R=0.63):
+    def __init__(self, A=27e-6*h100, n=1.07, R0=10e-3*h100, sigma_log_R=0.63):
         self.A = A
         self.n = n
         self.R0 = R0
@@ -123,14 +123,17 @@ class GalaxyHaloModel(object):
         self.r_half_model = r_half_model
         self.profile_model = profile_model
 
-    def set_m_star(self, x0, m0, r0, z0, xp):
+    def set_m_star(self, x0, m0, r0, z0, xp,
+                   r_half=None, m_star=None):
         """ set_m_star sets the stellar masses of a halo's dark matter
         particles. x0 (cMpx/h), m0 (Msun/h), r0 (cMpc/h), and z0 are the
         position, virial mass, virial, radius, and redshift at the chosen
         snapshot. xp (cMpc/h) is the positions of the particles.
         """
-        m_star = self.m_star_model.m_star(m0, z0)
-        r_half = self.r_half_model.r_half(r0, z0)
+        if m_star is None:
+            m_star = self.m_star_model.m_star(m0, z0)
+        if r_half is None:
+            r_half = self.r_half_model.r_half(r0, z0)
         return self.profile_model.set_m_star(x0, m_star, r_half, xp)
         
     
