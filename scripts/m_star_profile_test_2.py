@@ -5,6 +5,7 @@ import array
 import numpy as np
 import galpy.potential as potential
 import scipy.stats as stats
+import scipy.interpolate as interpolate
 import matplotlib.pyplot as plt
 import palette
 import numpy.random as random
@@ -15,9 +16,11 @@ params = { 'flat': True, 'H0': 70.0, 'Om0': 0.286,
            'Ob0': 0.049, 'sigma8': 0.82, 'ns': 0.95 }
 cosmo = cosmology.setCosmology('myCosmo', params)
     
-
 P_FILE_FMT = "%s/particles/part_%03d.%d"
 MP = 2.8e5
+
+TAG_METHOD = "energy"
+#TAG_METHOD = "infall"
 
 def read_part_file(base_dir, snap, i, vars_to_read=["x", "v", "phi"]):
     """ read_part_file reads the particles from a file for halo i at the given
@@ -83,7 +86,30 @@ def profile_info(x, mp, ok):
     out = np.zeros(len(W))
     out[order] = W
     
-    return r[i_max], v_rot[i_max], out
+    return r[i_max], v_rot[i_max], out, order
+
+def interp_vesc(x, vesc, order, bins):
+    r = np.sqrt(np.sum(x**2, axis=1))
+
+    r_sorted, vesc_sorted = r[order], vesc[order]
+    r_bins = np.linspace(np.log10(r_sorted[0]), np.log10(r_sorted[-1]), bins)
+    vesc_bins = vesc_sorted[np.searchsorted(np.log10(r_sorted), r_bins)]
+
+    log_interp_f = interpolate.interp1d(
+        r_bins, vesc_bins,
+        bounds_error=False,
+        fill_value=(vesc_bins[0], vesc_bins[-1])
+    )    
+
+    r_max, vesc_max = r_sorted[-1], vesc_sorted[-1]
+    def f(rr):
+        if rr > r_max:
+            return np.sqrt(r_max/rr)*vesc_max
+        elif rr <= 0:
+            return vesc_sorted[0]
+        return log_interp_f(np.log10(rr))
+        
+    return f
 
 def select_trajectories(n_trj_plot, trj_per_plot, trj_ranks, idx, ranks):
     idx_out = np.zeros(n_trj_plot*trj_per_plot, dtype=int)
@@ -94,22 +120,30 @@ def select_trajectories(n_trj_plot, trj_per_plot, trj_ranks, idx, ranks):
             idx_out[i*trj_per_plot + j] = choices[i]
     return idx_out
 
+def core_properties(x, v, phi, n_core):
+    f_cut = n_core/len(phi)
+    phi_cut = np.percentile(phi, 100*f_cut)
+    ok = phi <= phi_cut
+    return np.mean(x[ok,:], axis=0), np.mean(v[ok,:], axis=0)
+
 def main():
     palette.configure("False")
 
     params = {'flat': True, 'H0': 70.0, 'Om0': 0.286,
               'Ob0': 0.049, 'sigma8': 0.82, 'ns': 0.95}
-
-    base_dir = "../tmp_data/Halo169/"
-    p_snaps = [127, 177, 227]
+    
+    #base_dir = "../tmp_data/Halo169/"
+    base_dir = "/oak/stanford/orgs/kipac/users/phil1/simulations/MWest/Halo169/"
+    
+    #p_snaps = np.arange(127, 227 + 1)
+    p_snaps = np.arange(177, 227 + 1)
+    #p_snaps = [177, 202, 227]
     h_idx = 4
-    p_files = [
-        "../tmp_data/Halo169/particles/part_127.4",
-        "../tmp_data/Halo169/particles/part_177.4",
-        "../tmp_data/Halo169/particles/part_227.4"
-    ]
 
     particle_energies_fmt = "../plots/energies/particle_energies_%03d.png"
+    ang_mom_trj_fmt = "../plots/energies/ang_mom_trj.%02d.png"
+    vt_trj_fmt = "../plots/energies/vt_trj.%02d.png"
+    vr_trj_fmt = "../plots/energies/vt_trj.%02d.png"
     radii_trj_fmt = "../plots/energies/radii_trj.%02d.png"
     energies_trj_fmt = "../plots/energies/energies_trj.%02d.png"
     
@@ -134,6 +168,9 @@ def main():
     
     trj_t = np.zeros(len(p_snaps))
     trj_r = np.zeros((n_trj, len(p_snaps)))
+    trj_vt = np.zeros((n_trj, len(p_snaps)))
+    trj_vr = np.zeros((n_trj, len(p_snaps)))
+    trj_l = np.zeros((n_trj, len(p_snaps)))
     trj_r_apo = np.zeros((n_trj, len(p_snaps)))
     trj_r_peri = np.zeros((n_trj, len(p_snaps)))
     trj_TE = np.zeros((n_trj, len(p_snaps)))
@@ -141,6 +178,8 @@ def main():
 
     i_trj = None
     
+    
+
     for i_snap in range(len(p_snaps)):        
         snap = p_snaps[i_snap]
         print(snap)
@@ -157,40 +196,62 @@ def main():
         x, v, phi = read_part_file(base_dir, snap, h_idx, ["x", "v", "phi"])
         ok = x[:,0] > 0
         
+        x_core, v_core = core_properties(x[ok], v[ok], phi[ok], 100)        
+
+        print(x_core, m["x"][h_idx,snap,:])
+        print(v_core*np.sqrt(scale[snap]), m["v"][h_idx,snap,:])
+
         for dim in range(3):
-            v[:,dim] *= scale[snap] 
+            #v[:,dim] -= v_core[dim] #m["v"][h_idx,snap,dim]
+            v[:,dim] *= np.sqrt(scale[snap])
             v[:,dim] -= m["v"][h_idx,snap,dim]
+            #x[:,dim] -= x_core[dim] #m["x"][h_idx,snap,dim]
             x[:,dim] -= m["x"][h_idx,snap,dim]
             x[:,dim] *= scale[snap]
 
         idx = np.arange(len(x))
-        x, v, idx = x[ok,:], v[ok,:], idx[ok]
+        x, v, idx, phi = x[ok,:], v[ok,:], idx[ok], phi[ok]
         
         ke_nfw, pe_nfw = orbit_model.energy(rmax, vmax, x, v)
-        rmax_orig, vmax_orig, pe_orig = profile_info(x, MP, ok[ok])
+        rmax_orig, vmax_orig, pe_orig, _ = profile_info(x, MP, ok[ok])
         ke = np.sum(v**2, axis=1)/2
         rmax_curr, vmax_curr, pe_curr = rmax_orig, vmax_orig, pe_orig
         for i in range(5):
             is_bound = ke/vmax_curr**2 < pe_curr
-            rmax_curr, vmax_curr, pe_curr = profile_info(x, MP, is_bound)
+            rmax_curr, vmax_curr, pe_curr, order = profile_info(x, MP, is_bound)
         rmax_final, vmax_final, pe_final = rmax_curr, vmax_curr, pe_curr
+        vesc_final = np.sqrt(2*pe_final)
+        vesc_func = interp_vesc(x, vesc_final, order, 100)
         
         r = np.sqrt(np.sum(x**2, axis=1))
         E = ke/vmax_final**2 - pe_final
-
+ 
         if ranks is None:
             ranks = np.ones(len(ok))*-1
-            E_001 = np.percentile(E, 0.1)
-            E_005 = np.percentile(E, 0.5)
-            E_02 = np.percentile(E, 2)
-            E_1 = np.percentile(E, 10)
-            E_5 = np.percentile(E, 50)
+            if TAG_METHOD == "energy":
+                E_001 = np.percentile(E, 0.1)
+                E_005 = np.percentile(E, 0.5)
+                E_02 = np.percentile(E, 2)
+                E_1 = np.percentile(E, 10)
+                E_5 = np.percentile(E, 50)
 
-            ranks[idx[E < E_5]] = 5
-            ranks[idx[E < E_1]] = 4
-            ranks[idx[E < E_02]] = 3
-            ranks[idx[E < E_005]] = 2
-            ranks[idx[E < E_001]] = 1
+                ranks[idx[E < E_5]] = 5
+                ranks[idx[E < E_1]] = 4
+                ranks[idx[E < E_02]] = 3
+                ranks[idx[E < E_005]] = 2
+                ranks[idx[E < E_001]] = 1
+            elif TAG_METHOD == "infall":
+                snap_001 = np.percentile(infall_snap, 0.1)
+                snap_005 = np.percentile(infall_snap, 0.5)
+                snap_02 = np.percentile(infall_snap, 2)
+                snap_1 = np.percentile(infall_snap, 10)
+                snap_5 = np.percentile(infall_snap, 50)
+
+                ranks[idx[infall_snap <= snap_5]] = 5
+                ranks[idx[infall_snap <= snap_1]] = 4
+                ranks[idx[infall_snap <= snap_02]] = 3
+                ranks[idx[infall_snap <= snap_005]] = 2
+                ranks[idx[infall_snap <= snap_001]] = 1
 
             i_trj = select_trajectories(
                 n_trj_plots, trj_per_plot, trj_ranks, idx, ranks
@@ -204,11 +265,18 @@ def main():
         trj_r[:,i_snap] = r[j_trj]/rmax0
         for j in range(len(j_trj)):
             r_peri, r_apo, ok = orbit_model.peri_apo(
-                rmax_final, vmax_final, x[j_trj[j]], v[j_trj[j]], nfw_pot.vesc
+                #rmax_final, vmax_final, x[j_trj[j]], v[j_trj[j]], nfw_pot.vesc
+                rmax_final, vmax_final, x[j_trj[j]], v[j_trj[j]], vesc_func
             )
             trj_r_peri[j, i_snap] = r_peri/rmax0
             trj_r_apo[j, i_snap] = r_apo/rmax0
-        
+            rr, vR, vT = orbit_model.decompose_velocity(
+                x[j_trj[j]]/rmax0, v[j_trj[j]]/vmax0
+            )
+            trj_l[j,i_snap] = rr*vT
+            trj_vt[j,i_snap] = vT
+            trj_vr[j,i_snap] = np.abs(vR)
+
         levels = np.zeros((len(E), 6), dtype=bool)
         for k in range(levels.shape[1]):
             if k == levels.shape[1] - 1:
@@ -216,8 +284,7 @@ def main():
             else:
                 levels[:,k] = ranks[idx] == k+1
             print("%.2f" % (np.median(r[levels[:,k]]) * 1e3))
-        print()
-            
+ 
         plt.figure(0)
         plt.clf()
         
@@ -263,7 +330,6 @@ def main():
 
         plt.figure(2)
         plt.clf()
-        t = trj_t - trj_t[0]
 
         for j in range(j_start, j_start + trj_per_plot):
             c = trj_colors[j-j_start]
@@ -272,6 +338,33 @@ def main():
         plt.xlabel(r"$t - t_0\ ({\rm Gyr})$")
         plt.ylabel(r"$E/V^2_{\rm max,0}$")
         plt.savefig(energies_trj_fmt % i)
+
+        plt.figure(3)
+        plt.clf()
+
+        for j in range(j_start, j_start + trj_per_plot):
+            c = trj_colors[j-j_start]
+            plt.plot(t, trj_l[j], c=c)
+
+        plt.yscale("log")
+
+        plt.xlabel(r"$t - t_0\ ({\rm Gyr})$")
+        plt.ylabel(r"$L/(m_p V_{\rm max,0}R_{\rm max,0})$")
+        plt.savefig(ang_mom_trj_fmt % i)
+
+        plt.figure(4)
+        plt.clf()
+
+        for j in range(j_start, j_start + trj_per_plot):
+            c = trj_colors[j-j_start]
+            plt.plot(t, trj_vr[j], c=c)
+
+        plt.yscale("log")
+
+        plt.xlabel(r"$t - t_0\ ({\rm Gyr})$")
+        plt.ylabel(r"$v_R/V_{\rm max,0}$")
+        plt.savefig(vr_trj_fmt % i)
+
 
         j_start += trj_per_plot
         

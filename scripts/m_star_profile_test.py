@@ -14,7 +14,7 @@ palette.configure(False)
 
 P_FILE_FMT = "%s/particles/part_%03d.%d"
 BASE_DIR_FMT ="/oak/stanford/orgs/kipac/users/phil1/simulations/MWest/Halo%03d/"
-N_TRIALS = 50
+N_TRIALS = 500
 DM_MP = 2.8e5
 h100 = 0.7
 planck_fb = 0.02212 / 0.1206

@@ -65,6 +65,7 @@ TREE_COL_NAMES = {
 }
 
 OMEGA_M = 0.286
+P_FILE_FMT = "%s/particles/part_%03d.%d"
 
 def scale_factors(n_snap=236, a_start=1/20.0, a_end=1.0):
     """ scale_factors returns the scale factors used by the simulation. The
@@ -326,6 +327,49 @@ def tree_var_offset(hd, var_name):
     i = tree_var_col(hd, var_name)
     hd_size = 4*4 + 4*(hd.n_int + hd.n_float + hd.n_vec)
     return hd.n*4*(i + 2*max(0, i - hd.n_int - hd.n_float)) + hd_size    
+
+def read_part_file(base_dir, snap, i, vars_to_read=["x", "v", "phi"]):
+    """ read_part_file reads the particles from a file for halo i at the given
+    snapshot. You can change which particles are read using vars_to_read. By
+    default, all three are read and returned as a tuple of (x, v, phi).
+    """
+    fname = P_FILE_FMT % (base_dir, snap, i)
+    f = open(fname, "rb")
+
+    n = struct.unpack("i", f.read(4))[0]
+
+    if "x" in vars_to_read:
+        x = np.fromfile(f, dtype=("f", 3), count=n)
+    else:
+        x = None
+        f.seek(12*n, 1)
+
+    if "v" in vars_to_read:
+        v = np.fromfile(f, dtype=("f", 3), count=n)
+    else:
+        v = None
+        f.seek(12*n, 1)
+
+    if "phi" in vars_to_read:
+        phi = np.fromfile(f, dtype=np.float, count=n)
+    else:
+        phi = None
+
+    f.close()
+    return x, v, phi
+
+def read_tags(base_dir, h_idx):
+    fname = "%s/particles/ids.%d" % (base_dir, h_idx)
+    f = open(fname, "rb")
+    
+    n = struct.unpack("i", f.read(4))[0]
+    id = np.fromfile(f, dtype=np.int32, count=n)
+    snap = np.fromfile(f, dtype=np.int16, count=n)
+
+    f.close()
+
+    return id, snap
+
 
 def main():
     import sys

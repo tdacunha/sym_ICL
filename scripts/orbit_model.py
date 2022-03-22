@@ -105,9 +105,8 @@ def decompose_velocity(x, v):
 
 def peri_apo(rmax, vmax, x, v, vesc_func):
     param = np.zeros(6)
-    param[:3], param[3:] = x/rmax, v/vmax
     r, vR, vT = decompose_velocity(x/rmax, v/vmax)
-
+    
     v = np.sqrt(vR**2 + vT**2)
     vesc_r = vesc_func(r)
     if v >= vesc_r:
@@ -120,10 +119,10 @@ def peri_apo(rmax, vmax, x, v, vesc_func):
         u_m = -vesc_func(rr)**2 / 2
         return L_m*L_m/(2*rr*rr) + u_m
 
-    r_min, r_max = 0.001, 100
+    r_min, r_max = 1e-5, 100
     if u_m_eff(r_max) < e_m:
-        return -1, -1, False
-    
+        return -1, -1, False    
+
     r_u_eff_min = optimize.minimize_scalar(u_m_eff, bracket=(r_min, r_max)).x
     f = lambda rr: u_m_eff(rr) - e_m
     
