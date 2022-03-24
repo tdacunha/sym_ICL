@@ -30,26 +30,43 @@ class PlummerProfile(object):
         out[order] = d_m_star_enc
 
         return out
-            
+
+    def m_enc(self, m_star, r_half, r):
+        a = r_half
+        return m_star*r**3 /(r**2 + a**2)**1.5
+    
     def density(self, m_star, r_half, r):
         a = r_half
         return 3*m_star/(4*np.pi*a**3) * (1 + r**2/a**2)**(-5/2)
 
     
 class Nadler2020RHalf(object):
-    def __init__(self, A=27e-6*h100, n=1.07, R0=10e-3*h100, sigma_log_R=0.63):
+    def __init__(self, A=27e-6, n=1.07, R0=10e-3, sigma_log_R=0.63):
         self.A = A
         self.n = n
         self.R0 = R0
         self.sigma_log_R = sigma_log_R
 
-    def r_half(self, rvir, z):
-        a = 1/(1 + z)
+    def r_half(self, rvir):
+        # inputs and outputs are in pMpc (no h).
         log_R = np.log10(self.A * (rvir/self.R0)**self.n)
         log_scatter = self.sigma_log_R*random.normal(0, 1, size=np.shape(rvir))
-        return 10**(log_R + log_scatter) * a * h100
+        return 10**(log_R + log_scatter)
         
 
+class Jiang2019RHalf(object):
+    def __init__(self, sigma_log_R=0.2):
+        # I eyeballed the 0.2 from their plots.
+        self.sigma_log_R = sigma_log_R
+    
+    def r_half(self, rvir, cvir, z):
+        # From Appendix D
+        fz = 0.02*(1 + z)**-0.2
+        R = fz * (cvir/10)**-0.7 * rvir
+        log_scatter = self.sigma_log_R*random.normal(0, 1, size=np.shape(rvir))
+        return 10**(np.log10(R) + log_scatter)
+
+    
 class UniverseMachineMStar(object):
     def m_star(self, mpeak, z):
         mpeak = mpeak / h100

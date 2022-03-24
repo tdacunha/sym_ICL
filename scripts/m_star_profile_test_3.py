@@ -61,14 +61,14 @@ def clean_particles(x, v, phi, h, scale):
     those arrays were intially None), and the indices of these particles into
     the original array.
     """
+    ok = x[:,0] > 0
+    
     for dim in range(3):
         if v is not None:
             v[:,dim] *= np.sqrt(scale)
             v[:,dim] -= h["v"][dim]
         x[:,dim] -= h["x"][dim]
         x[:,dim] *= scale
-
-    ok = x[:,0] > 0
 
     idx = np.arange(len(x))
     x, idx = x[ok], idx[ok]
@@ -195,8 +195,7 @@ def rank_radii(m, base_dir, snap, h_idx, ranks, q):
 
 
 def main():
-    palette.configure("False")
-
+    palette.configure(False) 
     base_dir = "/oak/stanford/orgs/kipac/users/phil1/simulations/MWest/Halo169/"
     
     p_snaps = np.arange(127, 227 + 1)
