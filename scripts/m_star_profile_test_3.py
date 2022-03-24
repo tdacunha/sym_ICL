@@ -254,7 +254,7 @@ def main():
     e_high = 4*170e-6/m[h_idx,p_snaps[0]]["rvir"]*(scale[p_snaps[-1]]/
                                                    scale[p_snaps[0]])
 
-    plt.plot([lo, hi], [e_low]*2, [e_high]*2, alpha=0.2, color="k")
+    plt.fill_between([lo, hi], [e_low]*2, [e_high]*2, alpha=0.2, color="k")
 
     plt.legend(loc="upper left")
     plt.xlabel(r"$p$")
