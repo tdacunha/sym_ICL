@@ -11,6 +11,7 @@ import numpy.random as random
 import lib
 from palette import pc
 from colossus.cosmology import cosmology
+from colossus.halo import mass_so
 
 params = { 'flat': True, 'H0': 70.0, 'Om0': 0.286,
            'Ob0': 0.049, 'sigma8': 0.82, 'ns': 0.95 }
@@ -53,7 +54,7 @@ def profile_info(x, mp, ok):
     
     return r[i_max], v_rot[i_max], out, order
 
-def clean_particles(x, v, phi, h, scale):
+def clean_particles(x, v, phi, h, scale, ok=None):
     """ clean_particles centers particles and covnerts them to phsycial
     units and removes unused particles. x, v, and phi come from the particle
     file. v and phi may be None. h is a halo (a single element of the mergers
@@ -61,7 +62,10 @@ def clean_particles(x, v, phi, h, scale):
     those arrays were intially None), and the indices of these particles into
     the original array.
     """
-    ok = x[:,0] > 0
+    if ok is None:
+        ok = x[:,0] > 0
+    else:
+        ok = ok & (x[:,0] > 0)
     
     for dim in range(3):
         if v is not None:
@@ -92,13 +96,14 @@ def rank_by_quantile(x, quantiles, idx, n_max):
         
     return ranks
 
-def rank_by_radius(base_dir, snap, h_idx):
+def rank_by_radius(base_dir, snap, h_idx, ok=None):
     _, m = lib.read_mergers(base_dir)
     scale = lib.scale_factors()
     
     x, _, _ = lib.read_part_file(base_dir, snap, h_idx, ["x"])
     n_max, n_ranks = len(x), len(QUANTILES)
-    x, _, _, idx = clean_particles(x, None, None, m[h_idx,snap], scale[snap])
+    x, _, _, idx = clean_particles(x, None, None,
+                                   m[h_idx,snap], scale[snap], ok=ok)
     r = np.sqrt(np.sum(x**2, axis=1))
     
     ranks = rank_by_quantile(r, QUANTILES, idx, n_max)
@@ -122,6 +127,7 @@ def rank_by_nfw_energy(base_dir, snap, h_idx):
     return ranks
 
 
+
 def rank_by_radial_energy(base_dir, snap, h_idx):
     _, m = lib.read_mergers(base_dir)
     scale = lib.scale_factors()
@@ -141,6 +147,8 @@ def rank_by_radial_energy(base_dir, snap, h_idx):
 
     ranks = rank_by_quantile(E, QUANTILES, idx, n_max)
     return ranks
+
+    
 
 def rank_by_tree_energy(base_dir, snap, h_idx):
     _, m = lib.read_mergers(base_dir)
@@ -172,6 +180,32 @@ def rank_by_infall(base_dir, snap, h_idx):
     return ranks
 
 
+def rank_by_average_radius(base_dir, snaps, h_idx):
+    _, m = lib.read_mergers(base_dir)
+    scale = lib.scale_factors()
+    
+    for i_snap, snap in enumerate(snaps):
+        x, _, _ = lib.read_part_file(base_dir, snap, h_idx, ["x"])
+        if i_snap == 0:
+            n_max, n_ranks = len(x), len(QUANTILES)
+
+            r_sum = np.zeros(len(x))
+            n_snap = np.zeros(len(x), dtype=int)
+
+        x, _, _, idx = clean_particles(
+            x, None, None, m[h_idx,snap], scale[snap])
+
+        r = np.sqrt(np.sum(x**2, axis=1))
+        r_sum[idx] += r
+        n_snap[idx] += 1
+    
+    r_avg = np.ones(len(r_sum))*np.inf
+    r_avg[n_snap > 0] = r_sum[n_snap > 0] / n_snap[n_snap > 0]
+
+    ranks = rank_by_quantile(r_avg[idx], QUANTILES, idx, n_max)
+    return ranks
+
+
 def rank_radii(m, base_dir, snap, h_idx, ranks, q):
     scale = lib.scale_factors()
     x, _, _ = lib.read_part_file(base_dir, snap, h_idx, ["x"])
@@ -193,77 +227,93 @@ def rank_radii(m, base_dir, snap, h_idx, ranks, q):
 
     return rr
 
-
 def main():
     palette.configure(False) 
-    base_dir = "/oak/stanford/orgs/kipac/users/phil1/simulations/MWest/Halo169/"
-    
-    p_snaps = np.arange(127, 227 + 1)
-    p_snaps = np.arange(177, 227 + 1)
-    #p_snaps = [177, 202, 227]
+    base_dir = ("/oak/stanford/orgs/kipac/users/phil1/" + 
+                "simulations/MWest/Halo169/")
     h_idx = 4
     host_id = 169
-    
+
+    snap_start, snap_infall = 127, 227
+    pre_snaps = np.arange(snap_start - 10, snap_start)
+
     _, m = lib.read_mergers(base_dir)
 
     scale = lib.scale_factors()
     z = 1/scale - 1
     age = cosmo.age(z)
+    t_orbit = mass_so.dynamicalTime(z, "vir", "orbit")
 
-    snap = p_snaps[0]
+    dt = (age - age[snap_start])
+    dt_orbit = dt/t_orbit[snap_start]
+
+    comp_snaps = np.searchsorted(dt_orbit, [0, 0.5, 1, 2, 4])
+    comp_snaps = comp_snaps[comp_snaps < snap_infall]
+    print("comp_snaps:", comp_snaps)
+
+    snap0 = comp_snaps[0]
     ranks = [
-        rank_by_radius(base_dir, snap, h_idx),
-        rank_by_radial_energy(base_dir, snap, h_idx),
-        rank_by_nfw_energy(base_dir, snap, h_idx),
-        rank_by_infall(base_dir, snap, h_idx)
+        rank_by_radius(base_dir, snap0, h_idx),
+        rank_by_average_radius(base_dir, pre_snaps, h_idx),
+        rank_by_radial_energy(base_dir, snap0, h_idx),
+        rank_by_nfw_energy(base_dir, snap0, h_idx),
+        rank_by_infall(base_dir, snap0, h_idx)
     ]
+    colors = [pc("r"), pc("o"), pc("g"),  pc("b"), pc("p")]
+    names = [r"$r$",  r"$\langle r(t) \rangle$", r"${\rm KE} + {\rm PE}(r)$",
+             r"${\rm KE} + {\rm PE}_{\rm NFW}$", r"$t_{\rm infall}$"]
 
-    plt.figure(0)
-    quantile_comp_snaps = [p_snaps[0], p_snaps[-1]]
-    line_styles = ["--", "-"]
-    line_widths = [2, 3]
-    rvir = None
+    rr0 = rank_radii(m, base_dir, snap_start, h_idx, ranks, [0.1, 0.5, 0.9])
+    rvir0 = m[h_idx,snap_start]["rvir"]*scale[snap_start]
 
-    for k in range(len(quantile_comp_snaps)):
-        snap = quantile_comp_snaps[k]
+    for k in range(len(comp_snaps)):
+        plt.figure(0)
+        plt.clf()
+        
+        snap = comp_snaps[k]
+        dt_string = ((r"$\Delta t = %.1f\ {\rm Gyr} = " +
+                      r"%.1f\cdot t_{\rm orbit,vir}$") %
+                     (dt[snap], dt_orbit[snap]))
+
         rr = rank_radii(m, base_dir, snap, h_idx, ranks, [0.1, 0.5, 0.9])
 
-        colors = [pc("r"), pc("o"), pc("b"), pc("p")]
-        names = [r"$r$", r"${\rm KE} + {\rm PE}(r)$",
-                 r"${\rm KE} + {\rm PE}_{\rm NFW}$", r"$t_{\rm infall}$"]
-
-        if rvir is None:
-            rvir = m[h_idx,snap]["rvir"]*scale[snap]
-            print("Rvir = %.2f kpc" % (rvir*1e3))
-            
         for i in range(rr.shape[0]):
             ok = rr[i,:,1] >= 0
-            if line_styles[k] == "-":
-                plt.plot(QUANTILES[ok], rr[i,ok,1]/rvir, line_styles[k],
-                         label=names[i], c=colors[i], lw=line_widths[k])
-            else:
-                plt.plot(QUANTILES[ok], rr[i,ok,1]/rvir, line_styles[k],
-                         c=colors[i], lw=line_widths[k])
-    plt.xscale("log")
-    plt.yscale("log")
+            plt.plot(QUANTILES[ok], rr[i,ok,1]/rvir0, label=names[i],
+                     c=colors[i], lw=3)
+            plt.plot(QUANTILES[ok], rr0[i,ok,1]/rvir0, "--",
+                     c=colors[i], lw=2) 
 
-    lo, hi = plt.xlim()
-    plt.xlim(lo, hi)
 
-    e_low = 4*170e-6/m[h_idx,p_snaps[0]]["rvir"]
-    e_high = 4*170e-6/m[h_idx,p_snaps[0]]["rvir"]*(scale[p_snaps[-1]]/
-                                                   scale[p_snaps[0]])
+        rank_ref = rank_by_radius(base_dir, snap, h_idx, ok=ranks[0]>=0)
+        rr_ref = rank_radii(m, base_dir, snap, h_idx,
+                            [rank_ref], [0.1, 0.5, 0.9])
+        ok = rr_ref[0,:,1] >= 0
+        plt.plot(QUANTILES[ok], rr_ref[0,ok,1]/rvir0,
+                 "--", c="k", lw=3, label=r"$r_{\rm current}$") 
 
-    plt.plot([lo, hi], [e_low]*2, [e_high]*2, alpha=0.2, color="k")
+        plt.xscale("log")
+        plt.yscale("log")
+        plt.title(dt_string)
 
-    plt.legend(loc="upper left")
-    plt.xlabel(r"$p$")
-    plt.ylabel(r"$R_{\rm 1/2}/R_{\rm vir,0}$")
+        lo, hi = plt.xlim()
+        plt.xlim(lo, hi)
+        ylo, yhi = plt.ylim(2e-3, 2)
+        plt.ylim(ylo, yhi)
+    
+        e_rvir = 4*170e-6/rvir0 * scale[snap]
 
-    plt.savefig(
-        ("../plots/m_star_profs/profile_evolution/" + 
-         "quantile_evolution.%d.%d.png") %
-        (host_id, h_idx)
-    )
+        plt.fill_between([lo, hi], [ylo]*2, [e_rvir]*2, alpha=0.2, color="k")
+
+        plt.legend(loc="upper left")
+        plt.xlabel(r"$p$")
+        plt.ylabel(r"$R_{\rm 1/2}/R_{\rm vir,0}$")
+        plt.title(dt_string)
+
+        plt.savefig(
+            ("../plots/m_star_profs/profile_evolution/" + 
+             "quantile_evolution.%d.%d.%d.png") %
+            (host_id, h_idx, snap)
+        )
 
 if __name__ == "__main__": main()
