@@ -134,6 +134,8 @@ def rank_by_radial_energy(base_dir, snap, h_idx):
     n_max, n_ranks = len(x), len(QUANTILES)
     x, v, _, idx = clean_particles(x, v, None, m[h_idx,snap], scale[snap])
 
+    
+    
     ke = np.sum(v**2, axis=1)/2
 
     is_bound = np.ones(len(x), dtype=bool)
@@ -240,12 +242,20 @@ def rank_radii(m, base_dir, snap, h_idx, ranks, q):
     x, _, _ = lib.read_part_file(base_dir, snap, h_idx, ["x"])
     x, _, _, idx = clean_particles(x, None, None, m[h_idx,snap], scale[snap])
 
-    r = np.sqrt(np.sum(x**2, axis=1))
     rvir = scale[snap]*m[h_idx,snap]["rvir"]
 
     rr = np.zeros((len(ranks), np.max(ranks[0])+1, len(q)))
 
     for i in range(rr.shape[0]):
+        x0 = np.median(x[(ranks[i][idx] <= 1) &
+                         (ranks[i][idx] >= 0)], axis=0)
+        print(x0)
+        xx = np.copy(x)
+        for dim in range(3):
+            xx[:,dim] -= x0[dim]
+
+        r = np.sqrt(np.sum(xx**2, axis=1))
+ 
         for j in range(rr.shape[1]):
             in_rank = np.where(ranks[i][idx] == j)[0]
 
