@@ -4,72 +4,339 @@ import palette
 from palette import pc
 import numpy.random as random
 import scipy.stats as stats
+import abc
+import scipy.optimize as optimize
 
-h100 = 0.7
+""" 
+Variables names:
 
-class PlummerProfile(object):
-    def set_m_star(self, x0, m_star, r_half, xp):
-        # In 2D, a projected plummer profile's half-mass radius is equal
-        # to a. Not true in 3D.
-        a = r_half
+'mpeak' - Peak Brayn & Norman virial mass (Msun)
+'mvir' - Bryan & Norman virial mass (Msun)
+'rvir' - Bryan & Norman virial radius (pkpc)
+'cvir' - NFW concentration relative to the Bryan & Norman virial radius
+'z' redshift
+"""
 
-        dxp = np.zeros(xp.shape)
-        for dim in range(3):
-            dxp[:,dim] = xp[:,dim] - x0[dim]
-        rp = np.sqrt(np.sum(dxp**2, axis=1))
+NIL_RANK = -1
 
-        order = np.argsort(rp)
-        sorted_rp = rp[order]
-        m_star_enc = m_star * sorted_rp**3 / (sorted_rp**2 + a**2)**1.5
-        
-        d_m_star_enc = np.zeros(len(m_star_enc))
-        d_m_star_enc[0] = m_star_enc[0]
-        d_m_star_enc[1:] = m_star_enc[1:] - m_star_enc[:-1]
+DEFAULT_QUANTILE_EDGES = np.zeros(13)
+DEFAULT_QUANTILE_EDGES[1:] = 10**np.linspace(-4, 0, 12)
 
-        out = np.zeros(len(d_m_star_enc))
-        out[order] = d_m_star_enc
+DEFAULT_R_BINS = np.zeros(102)
+DEFAULT_R_BINS[1:] = 10**np.linspace(-2.5, 0, 101)
 
-        return out
+MIN_PARTICLES_PER_QUANTILE = 10
 
+DEFAULT_CORE_PARTICLES = 30
+
+#########################
+# Abstract base classes #
+#########################
+
+class ProfileModel(abc.ABC):
+    """ AbstractProfile is an abstract base class for galaxy profile models. It
+    allows you to convert a half-light radius into an enclosed stellar mass
+    profile.
+    """
+    
+    @abc.abstractmethod
     def m_enc(self, m_star, r_half, r):
+        """ m_enc returns the enclosed mass profile as a function of 3D radius,
+        r. m_star is the asymptotic stellar mass of the galaxy, r_half is the 2D
+        half-light radius of the galaxy. Returned masses will be in the same
+        units as m_star.
+        """
+        pass
+
+    @abc.abstractmethod
+    def density(self, m_star, r_half, r):
+        """ density returns the local density as a function of 3D radius, r.
+        m_star is the asymptotic stellas mass of the galaxy, r_hald is the 2D
+        half-light radius of the galaxy. Returned masses will be in the same
+        units of m_star.
+        """
+        pass
+
+class RHalfModel(abc.ABC):
+    """ RHalfModel is an abstract base class for models of galaxy half-mass
+    radii. 
+    """
+    
+    @abc.abstractmethod
+    def r_half(self, **kwargs):
+        """ r_half returns the half-mass radius of a a galaxy in physical kpc.
+        """
+        pass
+
+    @abc.abstractmethod
+    def var_names(self):
+        """ var_names returns the names of the variables this model requires.
+        """
+        pass
+    
+class MStarModel(abc.ABC):
+    """ MStarModel is an abstract base class for models of the Mhalo-Mstar
+    relation.
+    """
+
+    @abc.abstractmethod
+    def m_star(self, **kwargs):
+        """ m_star returns the stellar mass of a galaxy in Msun.
+        """
+        pass
+
+    @abc.abstractmethod
+    def var_names(self):
+        """ var_names returns the names of the variables this model requires.
+        """
+        pass
+    
+class AbstractRanking(abc.ABC):
+    """ AbstractRanking is an abstract base class for various models that 
+    rank particles.
+    """
+
+    def __init__(self, ranks, core_idx):
+        """ ranks is an array of ranks for every particle in the halo. If that
+        particle has been accreted by the time of tagging, it should have an
+        non-negative integer rank. If the particle hasn't been accreted yet,
+        it should be set to NIL_RANK
+
+        core_idx is the index of the core particles of the halo according to
+        this ranking scheme.
+
+        quantile_edges are the upper and lower quantile bounds for the each rank
+        (i.e. the quantile, q, of a particle in rank i should be in the range
+        quantile_edges[i] < q < quantile_edges[i+1]).
+        """
+        self.ranks = ranks
+        self.n_max = np.max(ranks)
+        self.core_idx = core_idx
+        self.mp_star = np.zeros(len(ranks))
+        
+        self.idx = None
+        self.x = None
+        self.v = None
+
+    def load_particles(self, x, v, idx):
+        """ load_particles loads paritcle properties into the ranking. Must
+        be called before mp_star() or either of the core functions. v may be
+        None unless you call a later method which works with velocities (i.e.
+        core_v)
+        """
+        self.x = np.copy(x)
+        if v is not None:
+            self.v = np.copy(v)
+        else:
+            self.v = None
+        self.idx = idx
+
+        xc = self.core_x()
+        for dim in range(3): self.x[:,dim] -= xc[dim]
+        
+        if self.v is not None:
+            vc = self.core_v()
+            for dim in range(3): self.v[:,dim] -= vc[dim]
+
+    def core_x(self):
+        """ core_x returns the position of the halo core. You must have called
+        load_particles() first.
+        """
+        if self.x is None: raise ValueError("x not set")
+        core = self.x[np.searchsorted(self.idx, self.core_idx)]
+        return np.median(core, axis=0)
+        
+    def core_v(self):
+        """ core_v returns the velocity of the halo core. You must have called
+        load_particles() first with a non-None argument for v.
+        """
+        if self.v is None: raise ValueError("v not set")
+        
+        core = self.v[np.searchsorted(self.idx, self.core_idx)]
+        return np.median(core, axis=0)
+        
+    def set_mp_star(self, rvir, profile_model, r_half, m_star,
+                r_bins=DEFAULT_R_BINS):
+
+        r = np.sqrt(np.sum(self.x**2, axis=1))/rvir
+        M = ranked_np_profile_matrix(self.ranks, self.idx, r, r_bins)
+        n = M.shape[1]
+
+        m_star_enc_target = profile_model.m_enc(
+            m_star, r_half, r_bins[1:]*rvir)
+        
+        dm_star_enc_target = np.zeros(len(m_star_enc_target))
+        dm_star_enc_target[1:] = m_star_enc_target[1:] - m_star_enc_target[:-1]
+        dm_star_enc_target[0] = m_star_enc_target[0]
+        
+        res = optimize.lsq_linear(
+            M, dm_star_enc_target, bounds=(np.zeros(n), np.inf*np.ones(n))
+        )
+        self.mp_star_table = res.x
+
+        self.mp_star[self.idx] = self.mp_star_table[self.ranks[self.idx]]
+        is_nil = self.ranks[self.idx] == NIL_RANK
+        self.mp_star[self.idx[is_nil]] = 0
+
+        correction_frac = m_star/np.sum(self.mp_star)
+        self.mp_star *= correction_frac
+        self.mp_star_table *= correction_frac
+        
+        return self.mp_star
+
+    def ranked_halfmass_radius(self):
+        """ ranked_halfmass_radii returns an array of the current half-mass
+        radii of each rank bin in pkpc.
+        """
+        r = np.sqrt(np.sum(self.x**2, axis=1))
+
+        rhalf = np.zeros(self.n_max+1)
+        for i in range(self.n_max+1):
+            rhalf[i] = np.median(r[self.ranks[self.idx] == i])
+            
+        return rhalf
+
+    def relaxation_time(self, mp, eps):
+        """ relaxation_time returns the relaxation time in Gyr of each particle
+        in the halo, assuming that it is on a circular orbit. mp and eps are in
+        Msun and pkpc, respectively.
+        """
+        
+        r = np.sqrt(np.sum(self.x**2, axis=1))
+        
+        order = np.argsort(r)
+        Nr = np.zeros(len(r))
+        Nr_sort = np.arange(len(Nr)) + 1
+        Nr[order] = Nr_sort
+
+        t_orb = t_orbit(Nr*mp, r)
+        t_relax = t_relax_t_orbit(Nr, r, eps)*t_orb
+
+        return t_relax
+    
+    def ranked_relaxation_time(self, mp, eps):
+        """ ranked_relaxation_times returns an array of the relaxation times of
+        each rank bin in Gyr. Ranks begin expanding when 0.18*t_relax has
+        passed.
+        """
+
+        t_relax = self.relaxation_time(mp, eps)
+        mean_t_relax = np.zeros(self.n_max+1)
+        for i in range(len(mean_t_relax)):
+            mean_t_relax[i] = np.mean(t_relax[self.ranks[self.idx] == i])
+        
+        return mean_t_relax
+    
+##################################
+# Specific Model Implementations #
+##################################
+
+    
+class PlummerProfile(ProfileModel):
+    """ PlummerProfile models a galaxy's mass distribution as a Plummer sphere.
+    """
+    def m_enc(self, m_star, r_half, r):
+        """ m_enc returns the enclosed mass profile as a function of 3D radius,
+        r. m_star is the asymptotic stellar mass of the galaxy, r_half is the 2D
+        half-light radius of the galaxy. Returned masses will be in the same
+        units as m_star.
+        """
         a = r_half
         return m_star*r**3 /(r**2 + a**2)**1.5
     
     def density(self, m_star, r_half, r):
+        """ density returns the local density as a function of 3D radius, r.
+        m_star is the asymptotic stellas mass of the galaxy, r_hald is the 2D
+        half-light radius of the galaxy. Returned masses will be in the same
+        units of m_star.
+        """
         a = r_half
         return 3*m_star/(4*np.pi*a**3) * (1 + r**2/a**2)**(-5/2)
-
     
-class Nadler2020RHalf(object):
+class Nadler2020RHalf(RHalfModel):
+    """ Nadler20202RHalf models galaxies according to the z=0 size-mass relation
+    in Nadler et al. 2020. (https://arxiv.org/abs/1912.03303)
+
+    This is calibrated by fitting a galaxy-halo model to Milky Way satellites.
+    """
+    
     def __init__(self, A=27e-6, n=1.07, R0=10e-3, sigma_log_R=0.63):
+        """ The constructor for Nadler2020RHalf allows you to change the
+        parameters of the fit. Please consult the paper for discussion on what
+        these parameters mean. This allows you to sample the posterior
+        distribution for these parameters.
+        """
         self.A = A
         self.n = n
         self.R0 = R0
         self.sigma_log_R = sigma_log_R
 
-    def r_half(self, rvir):
+    def r_half(self, **kwargs):
+        """ r_half returns the half-mass radius of a a galaxy in physical kpc.
+        Required keyword arguments:
+         - rvir
+        """
         # inputs and outputs are in pMpc (no h).
         log_R = np.log10(self.A * (rvir/self.R0)**self.n)
         log_scatter = self.sigma_log_R*random.normal(0, 1, size=np.shape(rvir))
         return 10**(log_R + log_scatter)
-        
 
-class Jiang2019RHalf(object):
+    def var_names(self):
+        """ var_names returns the names of the variables this model requires.
+        """
+        return ["rvir"]
+
+class Jiang2019RHalf(RHalfModel):
+    """ Jiang2019Rhalf models galaxies according to the z-dependent size-mass
+    relation in Jiang et al. 2019 (https://arxiv.org/abs/1804.07306; Appendix
+    D). This model is fit to   galaxies in NIHAO/VELA and has been rescaled
+    to  match the noramlization of the z-dependence seen in GAMA+CANDLES when
+    combined with abundance matching (Somerville et al. 2018;
+    https://arxiv.org/abs/1701.03526; M* > 1e8 Msun).
+    """
     def __init__(self, sigma_log_R=0.2):
+        """ The constructor for Jiang2019RHalf allows you to change the
+        intrinsic scatter in the relation. I eyeballed sigma_log_R at 0.2 from
+        their plots, so this value in particular is worth modifying.
+        """
         # I eyeballed the 0.2 from their plots.
         self.sigma_log_R = sigma_log_R
     
-    def r_half(self, rvir, cvir, z):
+    def r_half(self, rvir=None, cvir=None, z=None):
+        """ r_half returns the half-mass radius of a a galaxy in physical kpc.
+        Required keyword arguments:
+         - rvir
+         - cvir
+         - z
+        """
+        if rvir is None: raise ValueError("rvir not supplied")
+        if cvir is None: raise ValueError("cvir not supplied")
+        if z is None: raise ValueError("z not supplied")
+        
         # From Appendix D
         fz = 0.02*(1 + z)**-0.2
         R = fz * (cvir/10)**-0.7 * rvir
         log_scatter = self.sigma_log_R*random.normal(0, 1, size=np.shape(rvir))
         return 10**(np.log10(R) + log_scatter)
 
+    def var_names(self):
+        """ var_names returns the names of the variables this model requires.
+        """
+        return ["rvir", "cvir", "z"]
     
-class UniverseMachineMStar(object):
-    def m_star(self, mpeak, z):
-        mpeak = mpeak / h100
+class UniverseMachineMStar(MStarModel):
+    def m_star(self, mpeak=None, z=None):
+        """
+         Required keyword arguments:
+         - rvir
+         - cvir
+         - z
+        """
+
+        if mpeak is None: raise ValueError("mpeak not supplied")
+        if z is None: raise ValueError("z not supplied")
+        
+        mpeak = mpeak
         
         a = 1/(1 + z)
 
@@ -123,81 +390,219 @@ class UniverseMachineMStar(object):
         
         Ms = 10**log10_Ms_Msun
         
-        Ms *= h100
         return Ms
+    
+    def var_names(self):
+        """ var_names returns the names of the variables this model requires.
+        """
+        return ["mepak", "z"]
+    
 
+class RadialEnergyRanking(AbstractRanking):
+    def __init__(self, mp, x, v, idx, n_max,
+                 core_particles=DEFAULT_CORE_PARTICLES,
+                 quantile_edges=DEFAULT_QUANTILE_EDGES):
+        """ Takes mp (Msun; may be a scalar), x (pkpc), v (pkm/s), idx (the
+        index into the full particle array), and n_max (the number of particles
+        in the full particle arrays).
+        
+        only_tag may be set so that only a subset of particles may be tagged
+        (e.g. early-accreted particles).
+        """
+        self.rmax, self.vmax, self.pe_vmax2, self.order = profile_info(mp, x)
+
+        self.ke_vmax2 = 0.5*np.sum(v**2, axis=1) / self.vmax**2
+        self.E_vmax2 = self.ke_vmax2 + self.pe_vmax2
+        
+        core_q = min(core_particles / len(self.E_vmax2), 1)
+        core_E_vmax2 = np.quantile(self.E_vmax2, core_q)
+        
+        core_idx = idx[self.E_vmax2 <= core_E_vmax2]
+
+        E_edges = np.linspace(-10, 0, 41)
+        quantile_edges = [np.sum(self.E_vmax2< E_edges[i])/
+                          len(self.E_vmax2) for i in range(len(E_edges))]
+        
+        ranks, self.E_edges = rank_by_quantile(
+            quantile_edges, self.E_vmax2, idx, n_max)
+                
+        super(RadialEnergyRanking, self).__init__(ranks, core_idx)
+        
+#################################
+# General classes and functions #
+#################################
+        
 class GalaxyHaloModel(object):
     def __init__(self, m_star_model, r_half_model, profile_model):
         """ GalaxyHaloModel requires a model for the M*-Mhalo relation,
-        m_star_model (current options: UniverseMachineMStar), a model for how
-        the projected half-mass radius and Mhalo are related (current options:
-        Nadler2020RHalf), and a model for the halo profile (current options:
-        PlummerProfile). In principle, this lets you mix-and-match Mpeak-based,
-        Minfall-based models, and Mvir-based models. It's up to you not to do
-        that.
+        m_star_model, a model for how the projected half-mass radius and Mhalo
+        are related, and a model for the halo profile, profile_model. These
+        should be types that inherit from AbstractMstarModel,
+        AbstractRHalfModel, and AbstractProfileModel, respectively.
         """
         self.m_star_model = m_star_model
         self.r_half_model = r_half_model
         self.profile_model = profile_model
-
-    def set_m_star(self, x0, m0, r0, z0, xp,
-                   r_half=None, m_star=None):
-        """ set_m_star sets the stellar masses of a halo's dark matter
-        particles. x0 (cMpx/h), m0 (Msun/h), r0 (cMpc/h), and z0 are the
-        position, virial mass, virial, radius, and redshift at the chosen
-        snapshot. xp (cMpc/h) is the positions of the particles.
+        
+    def set_mp_star(self, ranks, r_half=None, m_star=None, **kwargs):
+        """ set_mp_star sets the stellar masses of a halo's dark matter
+        particles given their positions relative to the halo center, and
+        ranking, ranks (type: inherits from AbstractParticleRanking). This
+        function accepts the same keyword arguments as its m_star_model and
+        r_half_model arguments. You may also fix the half-mass radius and
+        stellar mass to whatever you want with r_half (units: pkpc) and m_star
+        (units: Msun).
         """
         if m_star is None:
-            m_star = self.m_star_model.m_star(m0, z0)
+            check_var_names(kwargs, self.m_star_model)
+            m_star = self.m_star_model.m_star(**kwargs)
         if r_half is None:
-            r_half = self.r_half_model.r_half(r0, z0)
-        return self.profile_model.set_m_star(x0, m_star, r_half, xp)
-        
+            check_var_names(kwargs, self.r_half_model)
+            r_half = self.r_half_model.r_half(**kwargs)
+        return ranks.mp_star(m_star, r_half, profile)
     
-def density_profile(x0, x, ms):
-    dx = np.zeros(x.shape)
+    def var_names(self):
+        """ var_names returns the names of the variables this model requires.
+        """
+        return sorted(list(dict(self.r_half_model.var_names()) +
+                           dict(self.m_star_mode.var_names())))
+
+def check_var_names(kwargs, model):
+    """ check_var_names checks whether kwargs contains all the arguments that
+    model requires.
+    """
+    model_names = model.var_names
+    for i in range(len(model_names)):
+        if model_names[i] not in kwargs:
+            raise ValueError(("The variable '%s' is required, but was not " +
+                              "given as an argument to set_mp_star.") %
+                             model_names[i])
+    
+        
+def clean_particles(x, v, h, h100, scale, ok=None):
+    """ clean_particles performs various normalizing and centering operations
+    on particle positions and velocities. x and v are the positions and
+    velocities of the particles in Gadget code units (cMpc/h, ckm/s). h is a
+    halo from a merger.dat file. h100 is H0 / (100 km/s/Mpc) and scale is the
+    scale factor. vp can be None and will be ignored if so.
+
+    Returns x_clean, v_clean, idx. Particles that have not yet been accreted
+    or which are False in the ok array will be removed. x_clean are centered
+    on the halo and in units of pkpc. v_clean are also centered on the halo and
+    are in units of pkm/s. idx is the indices of x_clean and v_clean in the
+    original x and v arrays.
+    """
+
+    if ok is None:
+        ok = x[:,0] > 0
+    else:
+        ok = ok & (x[:,0] > 0)
+
+    x = np.copy(x)
+    if v is not None: v = np.copy(v)
+        
     for dim in range(3):
-        dx[:,dim] = x[:,dim] - x0[dim]
-    r = np.sqrt(np.sum(dx**2, axis=1))
-
-    bins = np.linspace(0, 60, 200)
-    ms_sum, r_edge, _ = stats.binned_statistic(r, ms, "sum", bins=bins)
-    r_mid = (r_edge[1:] + r_edge[:-1]) / 2
-    vol = 4*np.pi/3 * (r_edge[1:]**3 - r_edge[:-1]**3)
-    
-    rho = ms_sum / vol
-
-    return r_mid, rho
-    
-def main():
-    palette.configure(False)
-    
-    n = 20000
-    
-    phi = 2*np.pi*random.random(n)
-    th = np.arccos(2*random.random(n) - 1)
-    r = random.random(n)*200
-
-    x = np.zeros((n, 3))
-    x[:,0] = r*np.cos(phi)*np.sin(th)
-    x[:,1] = r*np.sin(phi)*np.sin(th)
-    x[:,2] = r*np.cos(th)
-    
-    prof = PlummerProfile()
-    
-    origin = np.array([0, 0, 0])
-    ms_tot, r_half = 5e10, 20
-    ms = prof.set_m_star(origin, ms_tot, r_half, x)
-
-    r_prof, ms_prof = density_profile(origin, x, ms)
-    ms_prof_true = prof.density(ms_tot, r_half, r_prof)
-
-    plt.plot(r_prof, ms_prof, pc("r"))
-    plt.plot(r_prof, ms_prof_true, "--", c=pc("k"), lw=2)
-    plt.ylabel(r"$\rho_\star\ (h^2\,M_\odot/{\rm kpc}^3)$")
-    plt.xlabel(r"$r\ (h^{-1}\,{\rm kpc})$")
-    plt.yscale("log")
-    
-    plt.show()
+        if v is not None:
+            v[:,dim] *= np.sqrt(scale)
+            v[:,dim] -= h["v"][dim]
+        x[:,dim] -= h["x"][dim]
+        x[:,dim] *= scale
         
-if __name__ == "__main__": main()
+    idx = np.arange(len(x))
+    x, idx = x[ok], idx[ok]
+    if v is not None:
+        v = v[ok]
+
+    return 1e3*x/h100, v, idx
+
+def v_circ(m, r):
+    """ v_circ returns the circular velocity (in km/s) for a given mass (Msun)
+    and radius (pkpc)
+    """
+    return 655.8 * (m/1e14)**0.5 * (r/1e3)**-0.5
+
+def profile_info(mp, x, ok=None):
+    """ profile_info returns basic information about the spherically averaged
+    profile of a halo. x is the the position of particles (pkpc) relative to
+    the halo center, mp is the particle mass[es] (Msun), and ok flags 
+    which particles should be used ignored (e.g. if you're iteratively removing
+    particles after unbinding). Set to None if not needed.
+
+    returns r_max, v_max, PE/Vmax, and the order of particles according to
+    their radii.
+    """
+    r = np.sqrt(np.sum(x**2, axis=1))
+    
+    order = np.argsort(r)
+    r_sort = r[order]
+    dm = np.ones(len(r_sort))*mp
+    if ok is not None: dm[~ok] = 0
+    m_enc = np.cumsum(dm[order])
+    
+    v_rot = v_circ(m_enc, r_sort)
+    i_max = np.argmax(v_rot)
+    rmax, vmax = r_sort[i_max], v_rot[i_max]
+    
+    dW = np.zeros(len(m_enc))
+
+    dr = r_sort[1:] - r_sort[:-1]
+    dr[dr == 0] = np.finfo(dr.dtype).eps
+    r_scaled = (r_sort[1:]*r_sort[:-1]) / dr
+    dW[:-1] = v_circ(m_enc[:-1], r_scaled)**2
+
+    vesc_lim = v_circ(m_enc[-1], r_sort[-1]) * np.sqrt(2)
+
+    W = (np.cumsum(dW[::-1])[::-1] + 2*vesc_lim**2)/vmax**2
+    out = np.zeros(len(W))
+    out[order] = W
+
+    return rmax, vmax, -out, order
+
+def rank_by_quantile(quantiles, x, idx, n_max):
+    """ rank_by_quantile breaks the paritcles represented by x (any value) and
+    idx (index within the full set of particles, of length n_max). quantiles
+    gives the upper and lower quantile edges for each rank.
+    """
+    q = np.quantile(x, quantiles)
+    valid_edges = np.zeros(len(q), dtype=bool)
+    ranks = np.ones(n_max, dtype=int)*NIL_RANK
+
+    n_valid_edges, curr_rank = 0, 0
+    for i in range(len(q) - 1):
+        ok = (ranks[idx] == -1) & (x < q[i+1])
+        if np.sum(ok) < MIN_PARTICLES_PER_QUANTILE: continue
+        ranks[idx[ok]] = curr_rank
+        curr_rank += 1
+        
+        valid_edges[i+1] = True
+        if n_valid_edges == 0: valid_edges[i] = True
+        n_valid_edges += 1
+        
+    return ranks, q[valid_edges]
+
+def accreted_early(curr_snap, accrete_snap, f_accrete):
+    accreted_so_far = accrete_snap <= curr_snap
+    mid_snap = np.quantile(accrete_snap[accreted_so_far], f_accrete)
+    return accrete_snap <= mid_snap
+
+def t_relax_t_orbit(Nr, r, eps):
+    return Nr/4 * (np.log(r**2/eps**2 + 1) +
+                   eps**2-2*r**2/(3*(eps**2+r**2)) -
+                   np.log(3/2))**-1
+
+def t_orbit(Mr, r):
+    return 7.5 * (r/40)**1.5 * (1e10/Mr)**0.5
+
+def ranked_np_profile_matrix(ranks, idx, r, bins):
+    n_rank = 1 + np.max(ranks)
+    n_bins = len(bins)
+
+    M = np.zeros((n_bins-1, n_rank))
+
+    for i in range(n_rank):
+        ri = r[ranks[idx] == i]
+        N, _ = np.histogram(ri, bins=bins)
+        #M[:,i] =  np.cumsum(N)
+        M[:,i] = N
+        
+    return M

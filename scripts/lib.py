@@ -3,6 +3,8 @@ import struct
 import numpy as np
 import os
 import os.path as path
+import scipy.interpolate as interpolate
+
 
 """ MERGER_DTYPE is the numpy datatype used by the main return value of
 read_mergers(). Positions and distances are in comvoing Mpc/h, velocities are
@@ -10,7 +12,7 @@ physical peculiar velocities, and masses are in Msun/h.
 """
 MERGER_DTYPE = [("id", "i4"), ("mvir", "f4"), ("vmax", "f4"), ("rvmax", "f4"),
                 ("x", "f4", (3,)), ("v", "f4", (3,)), ("ok", "?"),
-                ("rvir", "f4")]
+                ("rvir", "f4"), ("cvir", "f4")]
 
 """ BRANCHES_DTYPE is the numpy datatype used by the main return value of 
 read_branches(). 
@@ -195,9 +197,16 @@ def read_mergers(dir_name):
         out["mvir"][i,:] = np.fromfile(f, np.float32, n_snap)
         out["ok"][i,:] = out["mvir"][i,:] > 0
         out["rvir"][i,:] = mvir_to_rvir(out["mvir"][i,:], a, OMEGA_M)
+
+    out["rvir"][out["rvir"] == 0] = -1
         
     for i in range(n_merger):
         out["vmax"][i,:] = np.fromfile(f, np.float32, n_snap)
+        ok = out["rvir"][i,:] > 0
+        out["cvir"][i,ok] = vmax_to_cvir_nfw(
+            out["vmax"][i,ok], out["mvir"][i,ok], out["rvir"][i,ok]*a[ok]
+        )
+        
     print("WARNING: merger.dat and lib.py are different versions")
     #for i in range(n_merger):
     #    out["rvmax"][i,:] = np.fromfile(f, np.float32, n_snap)
@@ -207,8 +216,6 @@ def read_mergers(dir_name):
         out["x"][i,:,:] = np.fromfile(f, (np.float32, (3,)), n_snap)
     for i in range(n_merger):
         out["v"][i,:,:] = np.fromfile(f, (np.float32, (3,)), n_snap)
-
-    out["rvir"][out["rvir"] == 0] = -1
         
     f.close()
 
@@ -370,6 +377,47 @@ def read_tags(base_dir, h_idx):
 
     return id, snap
 
+# NFW math
+
+def _two_way_interpolate(x, y):
+    """ two_way_interpolate returns interpolation functions that map from x -> y
+    and y -> x. Both input arrays must monotonic.
+    """
+    if x[0] < x[1]:
+        x_to_y = interpolate.interp1d(x, y)
+    else:
+        x_to_y = interpolate.interp1d(x[::-1], y[::-1])
+
+    if y[0] < y[1]:
+        y_to_x = interpolate.interp1d(y, x)
+    else:
+        y_to_x = interpolate.interp1d(y[::-1], x[::-1])
+
+    return x_to_y, y_to_x
+
+def _f(x): return np.log(1+x) - x/(1+x)
+def _x_max_nfw(): return 2.1626
+def _v_vmax_nfw(x): return 2.1506 * np.sqrt(_f(x) / x)
+def _m_enc_nfw(x): return _f(x)
+def _alpha_nfw(x): return -1 - 2*x/(1 + x)
+
+def _half_mass_nfw(x, mass_fraction):
+    def f_mass_ratio(xx):
+        return _m_enc_nfw(xx) / _m_enc_nfw(x) - mass_fraction
+    sol = optimize.root_scalar(f_mass_ratio, bracket=[1e-4*x, x])
+    return sol.root
+
+_c = 10**np.linspace(0, 3, 1000)
+_cv = np.sqrt(_f(_x_max_nfw()) / _x_max_nfw() * _c/_f(_c))
+# Make sure we're solving the correct part of the cV - cvir relation
+_cv[_c < _x_max_nfw()] = 1.0 
+c_to_cv_nfw, cv_to_c_nfw = _two_way_interpolate(_c, _cv)
+
+def vmax_to_cvir_nfw(vmax, mvir, rvir):
+    vvir = 655.8 * (mvir/1e14)**0.5 * (rvir/1.0)**-0.5
+    cv = vmax/vvir
+    cv[cv < 1] = 1
+    return cv_to_c_nfw(cv)
 
 def main():
     import sys

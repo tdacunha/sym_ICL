@@ -22,9 +22,10 @@ def t_relax_t_orbit(Nr, r, eps):
                    np.log(3/2))**-1
 
 def t_orbit(Mr, r):
-    return 7.5 * (r/h100/0.04)**1.5 * (1e10/Mr/h100)**0.5
+    return 7.5 * (r/40)**1.5 * (1e10/Mr)**0.5
 
 def t_relax_profile(mp, r, eps):
+    # mp, r, and eps are in Msun, pkpc, and kpc, repsectively. Answer is in Gyr.
     order = np.argsort(r)
     Nr = np.zeros(len(r))
     Nr_sort = np.arange(len(Nr)) + 1
@@ -74,14 +75,17 @@ def main():
 
     if STARTING_T_RELAX:
         r = np.sqrt(np.sum(x0**2, axis=1))
-        t_relax = t_relax_profile(MP, r, EPS*scale[snap_start])
+        t_relax = t_relax_profile(
+            MP/h100, r*1e3/h100, EPS*scale[snap_start]*1e3/h100)
         med_t_relax = np.zeros(len(rr0))
         for i in range(len(med_t_relax)):
             if not ok[i]:
                 med_t_relax[i] = -1
             else:
                 med_t_relax[i] = np.mean(t_relax[ranks[idx0] == i])
-    
+
+    print(med_t_relax)
+                
     colors = [pc("r"), pc("o"), pc("g"), pc("b"), pc("p"), pc("k")]
     
     plt.figure(0)
@@ -94,7 +98,8 @@ def main():
 
         if not STARTING_T_RELAX:
             r = np.sqrt(np.sum(x**2, axis=1))
-            t_relax = t_relax_profile(MP, r, EPS*scale[snap])
+            t_relax = t_relax_profile(
+                MP/h100, r/h100*1e3, 1e3*EPS*scale[snap]/h100)
             med_t_relax = np.zeros(len(rr))
             for i in range(len(med_t_relax)):
                 if not ok[i]:
@@ -111,7 +116,6 @@ def main():
     plt.ylim(ylo, yhi)
     plt.plot([0.177, 0.177], [ylo, yhi], "--", c="k")
         
-
     plt.legend(loc="upper left", fontsize=16)
     plt.xscale("log")
     plt.ylabel(r"$R_{1/2}/R_{1/2,0}$")
