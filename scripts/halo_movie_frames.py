@@ -15,6 +15,7 @@ except:
     
 H100 = 0.7
 MP_DM = 2.8e5/0.7 # In Msun
+EPS = 170e-3/H100 # In ckpc
 
 def main():
     # Parse command line arguements
@@ -62,8 +63,7 @@ def main():
     # Find the stellar masses. This function handles all the boilerplate code
     # for you.
     mp_star, ranks = star_tagging.default_tag(
-        base_dir, MP_DM, galaxy_halo_model, mergers, h_idx, tag_snap,
-        E_snap=127)
+        base_dir, MP_DM, galaxy_halo_model, mergers, h_idx, tag_snap)
     
     # Loop over the snapshots to create frames
     frame_idx = 0
@@ -142,7 +142,7 @@ def plot_frame(fig, ax, host, sub, scale, r_max, x, idx, x_core, mp_star):
             dx[:,0], dx[:,1], mp_dm, r_max, 100, 0.99)
     if star_c_range is None:
         star_c_range = get_c_range(
-            dx[:,0], dx[:,1], mp_star, r_max_star, 100, 0.99)
+            dx[:,0], dx[:,1], mp_star, r_max_star, 50, 0.99)
     
     H, _, _, im = ax[0].hist2d(
         dx[:,0], dx[:,1], bins=100, weights=mp_dm,
@@ -158,8 +158,8 @@ def plot_frame(fig, ax, host, sub, scale, r_max, x, idx, x_core, mp_star):
         cmap="Greys",
     )
 
-    rvir_sub = sub["rvir"]*1e3/H100
-    rvir_host = host["rvir"]*1e3/H100
+    rvir_sub = sub["rvir"]*1e3/H100*scale
+    rvir_host = host["rvir"]*1e3/H100*scale
     x_sub = sub["x"]*1e3/H100*scale
     x_host = host["x"]*1e3/H100*scale
     
@@ -171,7 +171,7 @@ def plot_frame(fig, ax, host, sub, scale, r_max, x, idx, x_core, mp_star):
     ax[1].plot([(x_sub[0]-x_host[0])-x_core[0]],
                [(x_sub[1]-x_host[1])-x_core[1]], "x", color="tab:blue")
     plot_circle(ax[1], (x_sub[0]-x_host[0])-x_core[0],
-                (x_host[1]-x_host[1])-x_core[1], rvir_sub,
+                (x_sub[1]-x_host[1])-x_core[1], rvir_sub,
                 "tab:blue", 4)
     plot_circle(ax[0], 0, 0, r_half, "tab:red", 1)
     plot_circle(ax[1], 0, 0, r_half, "tab:red", 3)
@@ -183,8 +183,6 @@ def plot_frame(fig, ax, host, sub, scale, r_max, x, idx, x_core, mp_star):
     ax[0].set_xlabel(r"$X\ ({\rm kpc})$")
     ax[1].set_xlabel(r"$X\ ({\rm kpc})$")
     ax[0].set_ylabel(r"$Y\ ({\rm kpc})$")
-    
-    #plt.colorbar()
 
 def plot_circle(ax, x0, y0, r, color, lw):
     th = np.linspace(0, 2*np.pi, 100)
