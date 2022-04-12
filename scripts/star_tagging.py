@@ -6,6 +6,16 @@ import numpy.random as random
 import scipy.stats as stats
 import abc
 import scipy.optimize as optimize
+import lib
+
+# cosmology information
+from colossus.cosmology import cosmology
+from colossus.halo import mass_so
+params = { 'flat': True, 'H0': 70.0, 'Om0': 0.286,
+           'Ob0': 0.049, 'sigma8': 0.82, 'ns': 0.95 }
+cosmo = cosmology.setCosmology('myCosmo', params)
+h100 = params["H0"]/100.0
+
 
 """ 
 Variables names:
@@ -73,6 +83,12 @@ class RHalfModel(abc.ABC):
         """ var_names returns the names of the variables this model requires.
         """
         pass
+
+    def trim_kwargs(self, kwargs):
+        out = {}
+        for key in self.var_names():
+            out[key] = kwargs[key]
+        return out
     
 class MStarModel(abc.ABC):
     """ MStarModel is an abstract base class for models of the Mhalo-Mstar
@@ -90,6 +106,12 @@ class MStarModel(abc.ABC):
         """ var_names returns the names of the variables this model requires.
         """
         pass
+
+    def trim_kwargs(self, kwargs):
+        out = {}
+        for key in self.var_names():
+            out[key] = kwargs[key]
+        return out
     
 class AbstractRanking(abc.ABC):
     """ AbstractRanking is an abstract base class for various models that 
@@ -117,7 +139,9 @@ class AbstractRanking(abc.ABC):
         self.idx = None
         self.x = None
         self.v = None
-
+        self.xc = None
+        self.vc = None
+        
     def load_particles(self, x, v, idx):
         """ load_particles loads paritcle properties into the ranking. Must
         be called before mp_star() or either of the core functions. v may be
@@ -131,12 +155,12 @@ class AbstractRanking(abc.ABC):
             self.v = None
         self.idx = idx
 
-        xc = self.core_x()
-        for dim in range(3): self.x[:,dim] -= xc[dim]
+        self.xc = self.core_x()
+        for dim in range(3): self.x[:,dim] -= self.xc[dim]
         
         if self.v is not None:
-            vc = self.core_v()
-            for dim in range(3): self.v[:,dim] -= vc[dim]
+            self.vc = self.core_v()
+            for dim in range(3): self.v[:,dim] -= self.vc[dim]
 
     def core_x(self):
         """ core_x returns the position of the halo core. You must have called
@@ -157,7 +181,6 @@ class AbstractRanking(abc.ABC):
         
     def set_mp_star(self, rvir, profile_model, r_half, m_star,
                 r_bins=DEFAULT_R_BINS):
-
         r = np.sqrt(np.sum(self.x**2, axis=1))/rvir
         M = ranked_np_profile_matrix(self.ranks, self.idx, r, r_bins)
         n = M.shape[1]
@@ -302,7 +325,7 @@ class Jiang2019RHalf(RHalfModel):
         # I eyeballed the 0.2 from their plots.
         self.sigma_log_R = sigma_log_R
     
-    def r_half(self, rvir=None, cvir=None, z=None):
+    def r_half(self, rvir=None, cvir=None, z=None, no_scatter=False):
         """ r_half returns the half-mass radius of a a galaxy in physical kpc.
         Required keyword arguments:
          - rvir
@@ -317,7 +340,10 @@ class Jiang2019RHalf(RHalfModel):
         fz = 0.02*(1 + z)**-0.2
         R = fz * (cvir/10)**-0.7 * rvir
         log_scatter = self.sigma_log_R*random.normal(0, 1, size=np.shape(rvir))
-        return 10**(np.log10(R) + log_scatter)
+        if not no_scatter:
+            return 10**(np.log10(R) + log_scatter)
+        else:
+            return R
 
     def var_names(self):
         """ var_names returns the names of the variables this model requires.
@@ -325,7 +351,7 @@ class Jiang2019RHalf(RHalfModel):
         return ["rvir", "cvir", "z"]
     
 class UniverseMachineMStar(MStarModel):
-    def m_star(self, mpeak=None, z=None):
+    def m_star(self, mpeak=None, z=None, no_scatter=False):
         """
          Required keyword arguments:
          - rvir
@@ -385,8 +411,9 @@ class UniverseMachineMStar(MStarModel):
                        
         log10_Ms_Msun = log10_Ms_M1 + log10_M1_Msun
 
-        log_scatter = 0.2*random.normal(0, 1, size=np.shape(mpeak))
-        log10_Ms_Msun += log_scatter
+        if not no_scatter:
+            log_scatter = 0.2*random.normal(0, 1, size=np.shape(mpeak))
+            log10_Ms_Msun += log_scatter
         
         Ms = 10**log10_Ms_Msun
         
@@ -395,7 +422,7 @@ class UniverseMachineMStar(MStarModel):
     def var_names(self):
         """ var_names returns the names of the variables this model requires.
         """
-        return ["mepak", "z"]
+        return ["mpeak", "z"]
     
 
 class RadialEnergyRanking(AbstractRanking):
@@ -431,20 +458,94 @@ class RadialEnergyRanking(AbstractRanking):
 #################################
 # General classes and functions #
 #################################
-        
+
+def default_tag(base_dir, mp, galaxy_halo_model, mergers, halo_idx, tag_snap,
+                E_snap=None):
+    """ default_tag returns an array of star particle masses and an object
+    that implements AbstractRanking (for core-tracking purposes) of the
+    specified subhalo.
+
+    base_dir is the base directory of the simulation output, galaxy_halo_model
+    is a GalaxyHaloModel instance, mergers is the second result of
+    lib.read_mergers(), halo_idx is the index of the halo within mergers, and
+    tag_snap is the snapshot where star particles will be tagged. If you'd like
+    to force default_tag to measure energies at a specific snapshot, you can do
+    that with E_snap.
+    """
+    halo = mergers[halo_idx]
+    scales = lib.scale_factors()
+    
+    star_tag_snap = tag_snap
+    if E_snap is None:
+        E_tag_snap = look_back_orbital_time(star_tag_snap, 0.125, halo, 0.5)
+    else:
+        E_tag_snap = E_snap
+
+    x_star, _, _ = lib.read_part_file(base_dir, star_tag_snap, halo_idx, ["x"])
+    x_E, v_E, _ = lib.read_part_file(base_dir, E_tag_snap, halo_idx, ["x", "v"])
+    n_max = len(x_E)
+
+    x_E, v_E, idx_E = clean_particles(
+        x_E, v_E, mergers[halo_idx,E_tag_snap],
+        h100, scales[E_tag_snap]
+    )
+    x_star, _, idx_star = clean_particles(
+        x_star, None, mergers[halo_idx,star_tag_snap],
+        h100, scales[star_tag_snap]
+    )
+    
+    ranks = RadialEnergyRanking(mp, x_E, v_E, idx_E, n_max)
+    ranks.load_particles(x_star, None, idx_star)
+
+    kwargs = galaxy_halo_model.get_kwargs(
+        mergers[halo_idx], star_tag_snap, h100)
+    mp_star = galaxy_halo_model.set_mp_star(ranks, kwargs)
+    
+    return mp_star, ranks
+    
+def look_back_orbital_time(snap, dt_orbit, halo, min_mass_frac):
+    """ look_back_orbital_time returns the snapshot of the time which has
+    experienced dt_orbit orbital times before the given snapshot, snap. To
+    protect against looking back too far, you may specify a maximum amount that
+    the halo can grow between the look-back snapshot. halo is an object from
+    the mergers.dat file.
+    """
+
+    scale = lib.scale_factors()
+    z = 1/scale - 1
+    age = cosmo.age(z)
+    T_orbit = mass_so.dynamicalTime(z, "vir", "orbit")
+    
+    dT = (age - age[snap])
+    dT_orbit = dT/T_orbit
+
+    orbit_start = np.searchsorted(dT_orbit, -dt_orbit)
+
+    for snap_start in range(snap, orbit_start, -1):
+        # This also catches cases where mvir = -1
+        if halo["mvir"][snap_start-1] < min_mass_frac*halo["mvir"][snap]:
+            break
+
+    return snap_start
+            
+
 class GalaxyHaloModel(object):
-    def __init__(self, m_star_model, r_half_model, profile_model):
+    def __init__(self, m_star_model, r_half_model, profile_model,
+                 no_scatter=False):
         """ GalaxyHaloModel requires a model for the M*-Mhalo relation,
         m_star_model, a model for how the projected half-mass radius and Mhalo
         are related, and a model for the halo profile, profile_model. These
         should be types that inherit from AbstractMstarModel,
         AbstractRHalfModel, and AbstractProfileModel, respectively.
+
+        If you'd like to remove scatter from your model, set no_scatter=True.
         """
         self.m_star_model = m_star_model
         self.r_half_model = r_half_model
         self.profile_model = profile_model
+        self.no_scatter = no_scatter
         
-    def set_mp_star(self, ranks, r_half=None, m_star=None, **kwargs):
+    def set_mp_star(self, ranks, kwargs, r_half=None, m_star=None):
         """ set_mp_star sets the stellar masses of a halo's dark matter
         particles given their positions relative to the halo center, and
         ranking, ranks (type: inherits from AbstractParticleRanking). This
@@ -455,23 +556,69 @@ class GalaxyHaloModel(object):
         """
         if m_star is None:
             check_var_names(kwargs, self.m_star_model)
-            m_star = self.m_star_model.m_star(**kwargs)
+            m_star = self.m_star_model.m_star(
+                no_scatter=self.no_scatter,
+                **self.m_star_model.trim_kwargs(kwargs))
         if r_half is None:
             check_var_names(kwargs, self.r_half_model)
-            r_half = self.r_half_model.r_half(**kwargs)
-        return ranks.mp_star(m_star, r_half, profile)
+            r_half = self.r_half_model.r_half(
+                no_scatter=self.no_scatter,
+                **self.r_half_model.trim_kwargs(kwargs))
+
+        return ranks.set_mp_star(
+            kwargs["rvir"], self.profile_model, r_half, m_star)
     
     def var_names(self):
         """ var_names returns the names of the variables this model requires.
         """
-        return sorted(list(dict(self.r_half_model.var_names()) +
-                           dict(self.m_star_mode.var_names())))
+        r_half_names = self.r_half_model.var_names()
+        m_star_names = self.m_star_model.var_names()
+        
+        out_dict = { }
+        for i in range(len(r_half_names)):
+            out_dict[r_half_names[i]] = None
+        for i in range(len(m_star_names)):
+            out_dict[m_star_names[i]] = None
 
+        if "rvir" not in out_dict: out_dict["rvir"] = None
+            
+        return sorted(list(out_dict.keys()))
+
+    def get_kwargs(self, halo, snap, h100):
+        """ get_kwargs creates the kwargs that that are needed for a call to
+        set_mp_star
+        """
+        scale = lib.scale_factors()[snap]
+        z = 1/scale - 1
+        
+        var_names = self.var_names()
+
+        kwargs = { }
+        
+        for i in range(len(var_names)):
+            if var_names[i] == "z":
+                kwargs["z"] = z
+                continue
+
+            if var_names[i] == "mpeak":
+                x = np.max(halo["mvir"])
+            else:
+                x = halo[snap][var_names[i]]
+            
+            if var_names[i] in ["rvir", "mvir", "mpeak"]:
+                x /= h100
+            if var_names[i] in ["rvir"]:
+                x *= scale*1e3
+
+            kwargs[var_names[i]] = x
+
+        return kwargs
+    
 def check_var_names(kwargs, model):
     """ check_var_names checks whether kwargs contains all the arguments that
     model requires.
     """
-    model_names = model.var_names
+    model_names = model.var_names()
     for i in range(len(model_names)):
         if model_names[i] not in kwargs:
             raise ValueError(("The variable '%s' is required, but was not " +

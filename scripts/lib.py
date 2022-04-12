@@ -5,7 +5,6 @@ import os
 import os.path as path
 import scipy.interpolate as interpolate
 
-
 """ MERGER_DTYPE is the numpy datatype used by the main return value of
 read_mergers(). Positions and distances are in comvoing Mpc/h, velocities are
 physical peculiar velocities, and masses are in Msun/h.
