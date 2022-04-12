@@ -47,7 +47,7 @@ def main():
     if tag_snap is None:
         ok = mergers[h_idx]["mvir"] > 0
         tag_snap = lib.merger_snap(
-            mergers[0], mergers[h_idx,ok]["x"], snaps[ok])
+            mergers[0], mergers[h_idx,ok]["x"], snaps[ok]) - 1
     
     # *****
     # Create the galaxy-halo model. This is done by loading your favorite
@@ -68,10 +68,15 @@ def main():
     # Loop over the snapshots to create frames
     frame_idx = 0
     fig, ax = plt.subplots(1, 2, figsize=(16, 8))
+    already_found = False
     for snap in range(len(snaps)):
         # Don't start plotting until the halo actually exists.
-        if mergers[h_idx,snap]["mvir"] == -1 or snap < tag_snap: continue
-        
+        if not already_found and (mergers[h_idx,snap]["mvir"] == -1 or 
+                                  snap < tag_snap or
+                                  mergers[0,snap]["mvir"] == -1):
+            continue
+        already_found=True
+
         # When testing locally, you might not have all the snapshots. but in
         # general, don't just try-and-except things.
         try:
@@ -162,17 +167,21 @@ def plot_frame(fig, ax, host, sub, scale, r_max, x, idx, x_core, mp_star):
     rvir_host = host["rvir"]*1e3/H100*scale
     x_sub = sub["x"]*1e3/H100*scale
     x_host = host["x"]*1e3/H100*scale
-    
-    plot_circle(ax[0], -x_core[0], -x_core[1], rvir_host, "tab:orange", 4)
-    plot_circle(ax[1], -x_core[0], -x_core[1], rvir_host, "tab:orange", 5)
-    plot_circle(ax[0], (x_sub[0]-x_host[0])-x_core[0],
-                (x_sub[1]-x_host[1])-x_core[1], rvir_sub,
-                "tab:blue", 3)
-    ax[1].plot([(x_sub[0]-x_host[0])-x_core[0]],
-               [(x_sub[1]-x_host[1])-x_core[1]], "x", color="tab:blue")
-    plot_circle(ax[1], (x_sub[0]-x_host[0])-x_core[0],
-                (x_sub[1]-x_host[1])-x_core[1], rvir_sub,
-                "tab:blue", 4)
+
+    if host["mvir"] > 0:
+        plot_circle(ax[0], -x_core[0], -x_core[1], rvir_host, "tab:orange", 4)
+        plot_circle(ax[1], -x_core[0], -x_core[1], rvir_host, "tab:orange", 5)
+
+    if sub["mvir"] > 0:
+        plot_circle(ax[0], (x_sub[0]-x_host[0])-x_core[0],
+                    (x_sub[1]-x_host[1])-x_core[1], rvir_sub,
+                    "tab:blue", 3)
+        ax[1].plot([(x_sub[0]-x_host[0])-x_core[0]],
+                   [(x_sub[1]-x_host[1])-x_core[1]], "x", color="tab:blue")
+        plot_circle(ax[1], (x_sub[0]-x_host[0])-x_core[0],
+                    (x_sub[1]-x_host[1])-x_core[1], rvir_sub,
+                    "tab:blue", 4)
+
     plot_circle(ax[0], 0, 0, r_half, "tab:red", 1)
     plot_circle(ax[1], 0, 0, r_half, "tab:red", 3)
     
