@@ -27,7 +27,7 @@ def main():
         tag_snap = int(sys.argv[5])
     else:
         tag_snap = None
-
+        
     snaps, scales = np.arange(236), lib.scale_factors()
         
     # Work out subdirectory names and create as needed.
@@ -42,7 +42,7 @@ def main():
     _, mergers = lib.read_mergers(base_dir)
 
     # *****
-    # If needed, compute the snapshot where the halo firt salls into the host.
+    # If needed, compute the snapshot where the halo first falls into the host.
     if tag_snap is None:
         ok = mergers[h_idx]["mvir"] > 0
         tag_snap = lib.merger_snap(
@@ -87,7 +87,7 @@ def main():
         
         # *****
         # Remove as-yet unaccreted particles, convert to physical, center
-        # around the hos. You could also give velocities as the second argument
+        # around the host. You could also give velocities as the second argument
         # and get them cleaned as the second return value.
         # idx is the indices of accreted particles into the full particle array
         # (e.g. something with the same length as the mp array)
@@ -101,7 +101,7 @@ def main():
 
         # Everything from here on is just plotting nonsense.
         r_plot = 4*rvir_max(mergers[h_idx,:], scales)
-        plot_frame(fig, ax, mergers[0,snap], mergers[h_idx,snap],
+        plot_frame(fig, ax, mergers[0,snap], mergers[h_idx,snap], scales[snap],
                    r_plot, x, idx, ranks.xc, mp_star)
         
         plt.savefig(path.join(out_dir, "frame_%03d.png" % frame_idx))
@@ -115,7 +115,7 @@ initial_r_half = None
 dm_c_range = None
 star_c_range = None
 
-def plot_frame(fig, ax, host, sub, r_max, x, idx, x_core, mp_star):
+def plot_frame(fig, ax, host, sub, scale, r_max, x, idx, x_core, mp_star):
     global initial_r_half
     global dm_c_range
     global star_c_range
@@ -151,15 +151,28 @@ def plot_frame(fig, ax, host, sub, r_max, x, idx, x_core, mp_star):
         cmap="Greys"
     )
 
-    gal_mult=20    
     H, _, _, im = ax[1].hist2d(
         dx[:,0], dx[:,1], bins=100, weights=mp_star,
         range=((-r_max_star, r_max_star), (-r_max_star, r_max_star)),
         norm=mpl_colors.LogNorm(star_c_range[0], star_c_range[1]),
         cmap="Greys",
     )
-        
 
+    rvir_sub = sub["rvir"]*1e3/H100
+    rvir_host = host["rvir"]*1e3/H100
+    x_sub = sub["x"]*1e3/H100*scale
+    x_host = host["x"]*1e3/H100*scale
+    
+    plot_circle(ax[0], -x_core[0], -x_core[1], rvir_host, "tab:orange", 4)
+    plot_circle(ax[1], -x_core[0], -x_core[1], rvir_host, "tab:orange", 5)
+    plot_circle(ax[0], (x_sub[0]-x_host[0])-x_core[0],
+                (x_sub[1]-x_host[1])-x_core[1], rvir_sub,
+                "tab:blue", 3)
+    ax[1].plot([(x_sub[0]-x_host[0])-x_core[0]],
+               [(x_sub[1]-x_host[1])-x_core[1]], "x", color="tab:blue")
+    plot_circle(ax[1], (x_sub[0]-x_host[0])-x_core[0],
+                (x_host[1]-x_host[1])-x_core[1], rvir_sub,
+                "tab:blue", 4)
     plot_circle(ax[0], 0, 0, r_half, "tab:red", 1)
     plot_circle(ax[1], 0, 0, r_half, "tab:red", 3)
     
@@ -177,7 +190,6 @@ def plot_circle(ax, x0, y0, r, color, lw):
     th = np.linspace(0, 2*np.pi, 100)
     y = np.sin(th)*r + y0
     x = np.cos(th)*r + x0
-
     ax.plot(x, y, c=color, lw=lw)
 
 def calc_r_half(dx, mp):
