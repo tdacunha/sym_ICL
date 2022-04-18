@@ -12,7 +12,7 @@ func ParticleDirName(baseDir string) string {
 }
 
 func HaloDirName(baseDir string) string {
-	return path.Join(baseDir, "haloes")
+	return path.Join(baseDir, "halos")
 }
 
 func SnapDirName(baseDir string, snap int) string {
@@ -24,11 +24,11 @@ func ParticleHeaderName(baseDir string) string {
 }
 
 func MergerFileName(baseDir string) string {
-	return path.Join(HaloDirName(baseDir), "mergers.dat")
+	return path.Join(HaloDirName(baseDir), "subhalos.dat")
 }
 
 func BranchesFileName(baseDir string) string {
-	return path.Join(HaloDirName(baseDir), "branches.dat")
+	return path.Join(HaloDirName(baseDir), "tree_header.dat")
 }
 
 func TreeFileNames(baseDir string) []string {
@@ -39,11 +39,12 @@ func TreeFileNames(baseDir string) []string {
 	
 	out := []string{ }
 	for i := range files {
-		name := files[i].Name()
-		if len(name) >= 7 &&
-			name[len(name)-7:] == ".df.bin" {
-			out = append(out, path.Join(dir, name))
-		}
+		//name := files[i].Name()
+		//if len(name) >= 7 &&
+		//	name[len(name)-7:] == ".df.bin" {
+		//	out = append(out, path.Join(dir, name))
+		//}
+		out = append(out, fmt.Sprintf("tree_%d.dat", i))
 	}
 
 	return out

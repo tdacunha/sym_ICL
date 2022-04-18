@@ -16,7 +16,6 @@ func TestParseConfig(t *testing.T) {
 	snapFmt := []string{"a", "aa"}
 	treeDir := []string{"b", "bb"}
 	baseDir := []string{"c", "cc"}
-	musicConfig := []string{"d", "dd"}
 	
 	if !Int32Eq(matchID, cfg.MatchID) {
 		t.Errorf("Expected MatchID = %d, got %d",
@@ -56,11 +55,6 @@ func TestParseConfig(t *testing.T) {
 	if !StringEq(baseDir, cfg.BaseDir) {
 		t.Errorf("Expected BaseDir = %s, got %s",
 			baseDir, cfg.BaseDir)
-	}
-
-	if !StringEq(musicConfig, cfg.MusicConfig) {
-		t.Errorf("Expected MusicConfig = %s, got %s",
-			musicConfig, cfg.MusicConfig)
 	}
 }
 
