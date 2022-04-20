@@ -5,12 +5,16 @@ eps = "0.00017"
 mp = "2.81981e5"
 # Number of particle files per snapshot in the Gadget output
 num_snapshot_files = 8
-# Change to the list of valid halo IDs/names.
-haloes = ["023", "008", "119", "188", "247", "268", "270", "288", "327", "349",
-          "364", "374", "414", "415", "416", "440", "460", "469", "490", "530",
-          "558", "567", "570", "606", "628", "641", "675", "718", "738", "749",
-          "797", "800", "825", "829", "852", "878", "881", "925", "926", "937",
-          "939", "967", "9749", "9829", "990"]
+
+# Change to the list of valid halo names.
+haloes = ['Halo023', 'Halo088', 'Halo119', 'Halo188', 'Halo247', 'Halo268', 'Halo270', 'Halo288', 'Halo327', 'Halo349', 'Halo364', 'Halo374', 'Halo414', 'Halo415', 'Halo416', 'Halo440', 'Halo460', 'Halo469', 'Halo490', 'Halo530', 'Halo558', 'Halo567', 'Halo570', 'Halo606', 'Halo628', 'Halo641', 'Halo675', 'Halo718', 'Halo738', 'Halo749', 'Halo797', 'Halo800', 'Halo825', 'Halo829', 'Halo852', 'Halo878', 'Halo881', 'Halo925', 'Halo926', 'Halo937', 'Halo939', 'Halo967', 'Halo9749', 'Halo9829', 'Halo990']
+
+# Change to the list of z=0 host IDs. (You'll probably want to auto-generate
+# this)
+halo_ids = [7019390, 31120521, 10208174, 28839883, 6646440, 7287306, 31107790, 8697419, 8391099, 15119051, 10301677, 9405794, 9487756, 29718260, 8297694, 14783515, 8932799, 30280719, 9659071, 7714515, 9967184, 8104130, 19722077, 27371347, 12638322, 30457872, 23284353, 28833029, 28077485, 12607178, 9948707, 9113976, 9721967, 6414883, 7961010, 10422676, 42248692, 8529408, 8839742, 9785057, 8282747, 18133566, 27982424, 18701512, 11431405]
+
+# Change to the snapshots of
+halo_snaps = [235]*len(halo_ids)
 
 # Use one string printf verb for the halo name, then two int printf verbs, one
 # for the snapshot and the other for the index. Use double %% instead of single
@@ -18,15 +22,15 @@ haloes = ["023", "008", "119", "188", "247", "268", "270", "288", "327", "349",
 snapshot_format = "/oak/stanford/orgs/kipac/users/ycwang19/ZEUS/MWmass_new/Halo%s/output/snapshot_%%03d.%%d"
 # Change this to the directory which contains the consistent trees text files.
 # Use a string printf verb for the halo name with a single %.
-tree_dir = "/oak/stanford/orgs/kipac/users/ycwang19/ZEUS/MWmass_new/Halo%s/output/rockstar/trees/"
-# Directory where the output data products will go. Us a string printf verb
+tree_dir = "/oak/stanford/orgs/kipac/users/ycwang19/ZEUS/MWmass_new/%s/output/rockstar/trees/"
+# Directory where the output data products will go. Use a string printf verb
 # for the halo name with a single %.
-data_product_dir = "/oak/stanford/orgs/kipac/users/phil1/simulations/Symphony/MW_mass/Halo%s/"
+data_product_dir = "/oak/stanford/orgs/kipac/users/phil1/simulations/ZoomIns/SymphonyMilkyWay/%s/"
 
-fmt_string = "%s %s %d %s %s %s" % (eps, mp, num_snapshot_files, 
-                                    snapshot_format, tree_dir,
-                                    data_product_dir)
+fmt_string = "%%d %%d %s %s %d %s %s %s" % (eps, mp, num_snapshot_files, 
+                                            snapshot_format, tree_dir,
+                                            data_product_dir)
 
 for i in range(len(haloes)):
     h = haloes[i]
-    print(fmt_string % (h, h, h))
+    print(fmt_string % (halo_ids[i], halo_snaps[i], h, h, h))

@@ -24,7 +24,7 @@ var DefaultConfig = TextConfig{
 	SkipLines: 0,
 	ColumnNames: map[string]int{},
 	
-	MaxBlockSize: 10 * 1<<30,
+	MaxBlockSize: 2 * 1<<30,
 	MaxLineSize: 1<<20,
 }
 

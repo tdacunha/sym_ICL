@@ -8,7 +8,7 @@ First, create a directory in `configs/`
 Next, run the following commands to diagnose any early issues (replacing the `/oak/stanford/orgs/kipac/users/ycwang19/ZEUS/MWmass_new/Halo*` substring with one that accesses all your halo directories)
 
 ``` ls /oak/stanford/orgs/kipac/users/ycwang19/ZEUS/MWmass_new/Halo*/output/rockstar/trees/ > configs/MW_mass/tree_locations.txt
-du -h /oak/stanford/orgs/kipac/users/ycwang19/ZEUS/MWmass_new/Halo*/output/rockstar/trees/tree_*.dat > configs/MW_mass/tree_sizes.txt
+du -h /oak/stanford/orgs/kipac/users/ycwang19/ZEUS/MWmass_new/Halo*/output/rockstar/trees/ > configs/MW_mass/tree_sizes.txt
 head -n 1 /oak/stanford/orgs/kipac/users/ycwang19/ZEUS/MWmass_new/Halo*/output/rockstar/trees/tree_0_0_0.dat > MW_mass/tree_headers.txt
 ```
 
@@ -28,3 +28,27 @@ Next, copy the Python script print_config.py into your config folder
 Open the file and edit all the lines which have a comment in front of them to match your simulation specifics. You'll need to be familiar with `"%s"`-style printf formatting, but might be able to pattern-match off the examples if you aren't. You'll also need to manually list the halo names: I'd recommend having your `tree_locations.txt` file open in another tab list while you do this. Next, run the Python script and pipe the output to the main config file.
 
 ``` python configs/MW_mass/print_config.py > configs/MW_mass/config.txt ```
+
+Now you're ready to start running the pipeline. You run a series of commands as
+
+``` go <file_name>.go path/to/config.txt ```
+
+You'll probably want to do test runs in an interactive session to make sure
+everything is working okay. If so, you cna specify the index of the halo you
+want to look at as
+
+``` go <file_name>.go path/to/config.txt <index> ```
+
+I'd recommend using the halo with the smallest tree files.
+
+The steps are the following:
+- `write_binary_tree.go` - Converts text consistent-trees files into binary
+  depth-first files.
+- `write_tree_header.go` - Identifies all main branches and annotates them with
+  tons of useful information.
+- `write_subhalo_files.go` - Collects major subhalos of the central halo
+  into a single, easy to access file.
+- `tag_particles.go` - Assigns particles to each subhalo and tags them with 
+  their infall times and other useful information
+- `xv.go` - Extracts x and v for all major subhalos.
+- `phi.go` - Computes potentials for all major subhalos.

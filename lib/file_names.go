@@ -36,15 +36,16 @@ func TreeFileNames(baseDir string) []string {
 	
 	files, err := ioutil.ReadDir(dir)
 	if err != nil { panic(err.Error()) }
-	
+
 	out := []string{ }
 	for i := range files {
-		//name := files[i].Name()
-		//if len(name) >= 7 &&
-		//	name[len(name)-7:] == ".df.bin" {
-		//	out = append(out, path.Join(dir, name))
-		//}
-		out = append(out, fmt.Sprintf("tree_%d.dat", i))
+		name := files[i].Name()
+		if len(name) >= 5 &&
+			name[:5] == "tree_" &&
+			name != "tree_header.dat"  {
+
+			out = append(out, path.Join(dir, name))
+		}
 	}
 
 	return out

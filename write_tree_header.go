@@ -2,12 +2,9 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"runtime"
 	"os"
-	"path"
 	"encoding/binary"
-	"strings"
 	"strconv"
 	"log"
 	
@@ -20,60 +17,39 @@ var (
 
 // HaloTrack contains the evolution history of a single halo.
 func main() {	
-	inputFile := os.Args[1]
-	treeDirs, mwIDs := ParseInputFile(inputFile)
-	for i := range treeDirs {
-		log.Printf("Analysing %s", treeDirs[i])
+	haloIndex := -1
+    if len(os.Args) > 3 || len(os.Args) <= 1 {
+        panic("You must provide a config file.")
+    } else if len(os.Args) == 3 {
+		var err error
+		haloIndex, err = strconv.Atoi(os.Args[2])
+		if err != nil { panic(err.Error()) }
+	}
+
+	inputName := os.Args[1]
+	cfg := lib.ParseConfig(inputName)
+
+	for i := range cfg.BaseDir {
+		if haloIndex != -1 && haloIndex !=  i { continue }
+
+		log.Printf("Analysing %s", cfg.BaseDir[i])
 		runtime.GC()
-		h := ReadFullTree(treeDirs[i])
+
+		h := ReadFullTree(cfg.BaseDir[i])
 		log.Println("Creating lookup table")
 		h.IDTable = NewLookupTable(h.ID)
 		log.Println("Creating tracks")
-		t := CalcTracks(h, mwIDs[i])
+		t := CalcTracks(h, cfg.MatchID[i], cfg.MatchSnap[i])
 		log.Println("Writing tracks")
-		WriteTracks(treeDirs[i], t)
+		WriteTracks(cfg.BaseDir[i], t)
+		MemoryLog()
 	}
 	log.Println("Done")
 }
 
-func ParseInputFile(file string) ([]string, []int32){
-	b, err := ioutil.ReadFile(file)
-	if err != nil { panic(err.Error()) }
-	s := string(b)
-	lines := strings.Split(s, "\n")
-	dirs, mwIDs := []string{ }, []int32{ }
-	
-	for i := range lines {
-		line := strings.Trim(lines[i], " ")
-		if len(line) == 0 { continue }
 
-		tok := strings.Split(lines[i], " ")
-		cols := []string{ }
-		for i := range tok {
-			if len(tok[i]) > 0 {
-				cols = append(cols, tok[i])
-			}
-		}
-		
-		if len(cols) != 2 {
-			panic(fmt.Sprintf("Line %d of %s is '%s', but you need there " +
-				"to be two columns.", i+1, file, line))
-		}
-		
-		dirs = append(dirs, cols[0])
-		mwID, err := strconv.Atoi(cols[1])
-		if err != nil {
-			panic(fmt.Sprintf("Could not parse the ID on line %d of " +
-				"%s: %s", i+1, file, cols[1]))
-		}
-		mwIDs = append(mwIDs, int32(mwID))
-	}
-	
-	return dirs, mwIDs
-}
-
-func ReadFullTree(treeDir string) *Haloes {
-	fileNames := lib.TreeFileNames(treeDir)
+func ReadFullTree(baseDir string) *Haloes {
+	fileNames := lib.TreeFileNames(baseDir)
 	files := make([]*os.File, len(fileNames))
 	for i := range files {
 		var err error
@@ -130,7 +106,7 @@ func (tab *LookupTable) Find(id int32) int32 {
 type Tracks struct {
 	N, MWIdx int
 	Starts, Ends []int32
-	IsReal, IsDisappear, IsMWSub, IsMWSubFirst []bool
+	IsReal, IsDisappear, IsCentralSub, IsCentralSubFirst []bool
 	HostIdx, TrackIdx [][]int32
 	IsReverseMerger, IsReverseSub, IsValidHost [][]bool
 	Mpeak []float32
@@ -138,7 +114,7 @@ type Tracks struct {
 }
 
 func WriteTracks(dir string, t *Tracks) {
-	f, err := os.Create(path.Join(dir, "branches.dat"))
+	f, err := os.Create(lib.BranchesFileName(dir))
 	if err != nil { panic(err.Error()) }
 	defer f.Close()
 	
@@ -154,68 +130,34 @@ func WriteTracks(dir string, t *Tracks) {
 	if err != nil { panic(err.Error()) }
 	err = binary.Write(f, lib.ByteOrder, t.IsDisappear)
 	if err != nil { panic(err.Error()) }
-	err = binary.Write(f, lib.ByteOrder, t.IsMWSub)
+	err = binary.Write(f, lib.ByteOrder, t.IsCentralSub)
 	if err != nil { panic(err.Error()) }
 	err = binary.Write(f, lib.ByteOrder, t.MostMassivePreHostTrack)
 	if err != nil { panic(err.Error()) }
 }
 
-func CalcTracks(h *Haloes, mwID int32) *Tracks {
+func CalcTracks(h *Haloes, centralID int32, centralSnap int32) *Tracks {
+	if centralSnap != 235 {
+		panic("Matching off a central halo at a snapshot other " + 
+			"than 235 isn't supported right now.")
+	}
+
 	t := &Tracks{ }
 
-	log.Println("StartsEnds")
 	t.Starts, t.Ends = StartsEnds(h)
-	MemoryLog()
-
 	t.N = len(t.Starts)
-
-	log.Println("FindMW")
-	t.MWIdx = FindMW(h, t, mwID)
-	MemoryLog()	
-
-	log.Println("IsReal")
+	t.MWIdx = FindCentral(h, t, centralID)
 	t.IsReal = IsReal(h, t)
-	MemoryLog()
-
-	log.Println("IsDisappear")
 	t.IsDisappear = IsDisappear(h, t)
-	MemoryLog()
-
-	log.Println("IsMwSub")
-	t.IsMWSub = IsMWSub(h, t)
-	MemoryLog()		
-
-	log.Println("IsMwSub")
-	t.IsMWSubFirst = IsMWSubFirst(h, t)
-	MemoryLog()		
-	
-	log.Println("FindAllHosts")
+	t.IsCentralSub = IsCentralSub(h, t)
+	t.IsCentralSubFirst = IsCentralSubFirst(h, t)
 	t.HostIdx = FindAllHosts(h, t)	
-	MemoryLog()
-
-	log.Println("FindTrackIndices")
 	t.TrackIdx = FindTrackIndices(h, t)
-	MemoryLog()
-	
-	log.Println("IsReverseMerger")
 	t.IsReverseMerger = IsReverseMerger(h, t)
-	MemoryLog()
-
-	log.Println("IsReverseSub")
 	t.IsReverseSub = IsReverseSub(h, t)
-	MemoryLog()
-
-	log.Println("IsValidHost")
 	t.IsValidHost = IsValidHost(h, t)
-	MemoryLog()
-
-	log.Println("Mpeak")
 	t.Mpeak = Mpeak(h, t)
-	MemoryLog()
-
-	log.Println("MostMassivePreHostTrack")
 	t.MostMassivePreHostTrack = MostMasssivePreHostTrack(h, t)
-	MemoryLog()
 
 	return t
 }
@@ -241,13 +183,14 @@ func StartsEnds(h *Haloes) (starts, ends []int32) {
 	return starts, ends
 }
 
-func FindMW(h *Haloes, t *Tracks, mwID int32) int {
+func FindCentral(h *Haloes, t *Tracks, centralID int32) int {
+	fmt.Println(len(h.ID), len(t.Starts), centralID)
 	for i := range t.Starts {
-		if h.ID[t.Starts[i]] == mwID {
+		if h.ID[t.Starts[i]] == centralID {
 			return i
 		}
 	}
-	panic(fmt.Sprintf("Halo with ID %d not found", mwID))
+	panic(fmt.Sprintf("Halo with ID %d not found", centralID))
 }
 
 func IsReal(h *Haloes, t *Tracks) []bool {
@@ -269,7 +212,7 @@ func IsDisappear(h *Haloes, t *Tracks) []bool {
 	return out
 }
 
-func IsMWSub(h *Haloes, t *Tracks) []bool {
+func IsCentralSub(h *Haloes, t *Tracks) []bool {
 	minID, maxID := h.DFID[t.Starts[t.MWIdx]], h.DFID[t.Ends[t.MWIdx] - 1]
 
 	out := make([]bool, t.N)
@@ -286,7 +229,7 @@ func IsMWSub(h *Haloes, t *Tracks) []bool {
 	return out
 }
 
-func IsMWSubFirst(h *Haloes, t *Tracks) []bool {
+func IsCentralSubFirst(h *Haloes, t *Tracks) []bool {
 	minID, maxID := h.DFID[t.Starts[t.MWIdx]], h.DFID[t.Ends[t.MWIdx] - 1]
 
 	out := make([]bool, t.N)

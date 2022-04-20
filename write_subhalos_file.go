@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"runtime"
 	"os"
 	"encoding/binary"
@@ -59,6 +58,7 @@ func main() {
 		log.Printf("Mpeak cutoff: %g", cfg.Mp[i]*NPeakMin)
 		
 		mpeak := Mpeak(b, mvir)
+
 		mIdx := FindLargestMergers(b, mpeak, float32(cfg.Mp[i]*NPeakMin))
 		runtime.GC()
 
@@ -86,6 +86,7 @@ func main() {
 
 		mFile.Close()		
 	}
+	log.Println("Finishing write_subhalos_file")
 }
 
 func WriteHeader(snaps int32, mIdx []int32, out *os.File) {
@@ -93,7 +94,6 @@ func WriteHeader(snaps int32, mIdx []int32, out *os.File) {
 	if err != nil { panic(err.Error()) }
 	err = binary.Write(out, lib.ByteOrder, int32(len(mIdx)))
 	if err != nil { panic(err.Error()) }
-	fmt.Println(mIdx)
 	err = binary.Write(out, lib.ByteOrder, mIdx)
 	if err != nil { panic(err.Error()) }
 }
@@ -182,10 +182,10 @@ func FindLargestMergers(
 	mpeak64 := make([]float64, b.N)
 	for i := range mpeak64 { mpeak64[i] = float64(mpeak[i]) }
 	order := lib.QuickSortIndex(mpeak64)
-	
+
 	idx := []int32{ b.CentralIdx }
 	for i := len(mpeak) - 1; i >= 0; i-- {
-		if mpeak[i] < mpeakMin { break }
+		if mpeak[order[i]] < mpeakMin { continue }
 		if b.IsMWSub[order[i]] {
 			idx = append(idx, int32(order[i]))
 		}

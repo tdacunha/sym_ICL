@@ -25,7 +25,7 @@ snapshot_format = "/oak/stanford/orgs/kipac/users/ycwang19/ZEUS/MWmass_new/Halo%
 tree_dir = "/oak/stanford/orgs/kipac/users/ycwang19/ZEUS/MWmass_new/%s/output/rockstar/trees/"
 # Directory where the output data products will go. Use a string printf verb
 # for the halo name with a single %.
-data_product_dir = "/oak/stanford/orgs/kipac/users/phil1/simulations/Symphony/MW_mass/%s/"
+data_product_dir = "/oak/stanford/orgs/kipac/users/phil1/simulations/ZoomIns/SymphonyMilkyWay/%s/"
 
 fmt_string = "%%d %%d %s %s %d %s %s %s" % (eps, mp, num_snapshot_files, 
                                             snapshot_format, tree_dir,

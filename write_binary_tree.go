@@ -86,6 +86,8 @@ func main() {
 		lib.MaybeMkdir(lib.HaloDirName(cfg.BaseDir[i]))
 		ConvertTree(cfg.TreeDir[i], cfg.BaseDir[i])
 	}
+
+	log.Println("Finishing write_binary_tree")
 }
 
 func CountHeaderLines(fileName string) (nLines, nTrees int) {
@@ -163,10 +165,8 @@ func TreeFileNames(dir string) []string {
 func BinFileNames(outDir string, treeFileNames []string) []string {
 	out := []string{ }
 	for i := range treeFileNames {
-		name := path.Base(treeFileNames[i])
-		nameBase := strings.Split(name, ".")[0]
-		outName := fmt.Sprintf("%s.df.bin", nameBase)
-		out = append(out, path.Join(outDir, outName))
+		outName := fmt.Sprintf("tree_%d.dat", i)
+		out = append(out, path.Join(lib.HaloDirName(outDir), outName))
 	}
 	return out
 }
