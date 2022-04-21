@@ -19,7 +19,7 @@ halo_snaps = [235]*len(halo_ids)
 # Use one string printf verb for the halo name, then two int printf verbs, one
 # for the snapshot and the other for the index. Use double %% instead of single
 # % for the ints and a single % for the halo name.
-snapshot_format = "/oak/stanford/orgs/kipac/users/ycwang19/ZEUS/MWmass_new/Halo%s/output/snapshot_%%03d.%%d"
+snapshot_format = "/oak/stanford/orgs/kipac/users/ycwang19/ZEUS/MWmass_new/%s/output/snapshot_%%03d.%%d"
 # Change this to the directory which contains the consistent trees text files.
 # Use a string printf verb for the halo name with a single %.
 tree_dir = "/oak/stanford/orgs/kipac/users/ycwang19/ZEUS/MWmass_new/%s/output/rockstar/trees/"
