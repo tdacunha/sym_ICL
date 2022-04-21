@@ -106,11 +106,12 @@ func (tab *LookupTable) Find(id int32) int32 {
 type Tracks struct {
 	N, MWIdx int
 	Starts, Ends []int32
-	IsReal, IsDisappear, IsCentralSub, IsCentralSubFirst []bool
-	HostIdx, TrackIdx [][]int32
+	IsReal, IsDisappear, IsCentralSub []bool
+	HostIdx, HostSnap, TrackIdx [][]int32
 	IsReverseMerger, IsReverseSub, IsValidHost [][]bool
 	Mpeak []float32
 	MostMassivePreHostTrack []int32
+	PreprocessSnap []int32
 }
 
 func WriteTracks(dir string, t *Tracks) {
@@ -134,6 +135,7 @@ func WriteTracks(dir string, t *Tracks) {
 	if err != nil { panic(err.Error()) }
 	err = binary.Write(f, lib.ByteOrder, t.MostMassivePreHostTrack)
 	if err != nil { panic(err.Error()) }
+	err = binary.Write(f, lib.ByteOrder, t.PreprocessSnap)
 }
 
 func CalcTracks(h *Haloes, centralID int32, centralSnap int32) *Tracks {
@@ -150,14 +152,14 @@ func CalcTracks(h *Haloes, centralID int32, centralSnap int32) *Tracks {
 	t.IsReal = IsReal(h, t)
 	t.IsDisappear = IsDisappear(h, t)
 	t.IsCentralSub = IsCentralSub(h, t)
-	t.IsCentralSubFirst = IsCentralSubFirst(h, t)
-	t.HostIdx = FindAllHosts(h, t)	
+	t.HostIdx, t.HostSnap = FindAllHosts(h, t)	
 	t.TrackIdx = FindTrackIndices(h, t)
 	t.IsReverseMerger = IsReverseMerger(h, t)
 	t.IsReverseSub = IsReverseSub(h, t)
 	t.IsValidHost = IsValidHost(h, t)
 	t.Mpeak = Mpeak(h, t)
 	t.MostMassivePreHostTrack = MostMasssivePreHostTrack(h, t)
+	t.PreprocessSnap = PreprocessSnap(h, t)
 
 	return t
 }
@@ -229,36 +231,20 @@ func IsCentralSub(h *Haloes, t *Tracks) []bool {
 	return out
 }
 
-func IsCentralSubFirst(h *Haloes, t *Tracks) []bool {
-	minID, maxID := h.DFID[t.Starts[t.MWIdx]], h.DFID[t.Ends[t.MWIdx] - 1]
-
-	out := make([]bool, t.N)
-	for i := range out {
-		start, end := t.Starts[i], t.Ends[i]
-		for j := start; j < end; j++ {
-			if h.UPID[j] != -1 {
-				k := h.IDTable.Find(h.UPID[j])
-				out[i] = h.DFID[k] >= minID && h.DFID[k] <= maxID
-			}
-		}
-	}
-
-	return out
-}
-
-func FindAllHosts(h *Haloes, t *Tracks) [][]int32 {
-	out := make([][]int32, t.N)
+func FindAllHosts(h *Haloes, t *Tracks) ([][]int32, [][]int32) {
+	outIdx, outSnap := make([][]int32, t.N), make([][]int32, t.N)
 
 	for i := range t.Starts {
 		for j := t.Starts[i]; j < t.Ends[i]; j++ {
 			if h.UPID[j] != -1 {
 				k := h.IDTable.Find(h.UPID[j])
-				out[i] = append(out[i], k)
+				outIdx[i] = append(outIdx[i], k)
+				outSnap[i] = append(outSnap[i], h.Snap[j])
 			}
 		}
 	}
 
-	return out
+	return outIdx, outSnap
 }
 
 func FindTrackIndices(h *Haloes, t *Tracks) [][]int32 {
@@ -384,6 +370,7 @@ func MostMasssivePreHostTrack(h *Haloes, t *Tracks) []int32 {
 	for i := range out { out[i] = -1 }
 	for i := range out {
 		for j := range t.TrackIdx[i] {
+			if !t.IsValidHost[i][j] { continue }
 			k := t.TrackIdx[i][j]
 			if k == int32(t.MWIdx) {
 				out[i] = -1
@@ -399,6 +386,20 @@ func MostMasssivePreHostTrack(h *Haloes, t *Tracks) []int32 {
 	return out
 }
 
+func PreprocessSnap(h *Haloes, t *Tracks) []int32 {
+	out := make([]int32, t.N)
+	for i := range out { out[i] = -1 }
+	for i := range out {
+		for j := range t.HostSnap[i] {
+			if !t.IsValidHost[i][j] && t.TrackIdx[i][j] != int32(t.MWIdx) {
+				continue }
+			if out[i] == -1 || out[i] > t.HostSnap[i][j] {
+				out[i] = t.HostSnap[i][j]
+			}
+		}
+	}
+	return out
+}
 
 func IDOrder(id []int32) []int32 {
 	fid := make([]float64, len(id))

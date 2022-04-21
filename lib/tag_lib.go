@@ -21,7 +21,7 @@ func Mpeak(mvir []float32) float32 {
 // mass of all the tracked haloes.
 func IsNewOwner(mpeak []float32, prevOwners []int32, i int32) bool {
 	last := len(prevOwners) - 1
-	return len(prevOwners) < 0 || mpeak[prevOwners[last]] < mpeak[i]
+	return len(prevOwners) <= 0 || mpeak[prevOwners[last]] < mpeak[i]
 }
 
 // BetterOwner returns which halo index, i or j, is better owner of a given
@@ -77,11 +77,10 @@ func (w *TagWorker) LoadParticles(x [][3]float32) {
 	w.finder.Reuse(w.x)
 
 	// Initialize 
-	
 	if cap(w.Owners) >= len(w.x) {
 		w.Owners = w.Owners[:len(w.x)]
 	} else {
-		w.Owners = w.Owners[:cap(w.x)]
+		w.Owners = w.Owners[:cap(w.Owners)]
 
 		nNew := len(w.x) - len(w.Owners)
 		w.Owners = append(w.Owners, make([]int32, nNew)...)
@@ -94,7 +93,7 @@ func (w *TagWorker) LoadParticles(x [][3]float32) {
 // positions, virial radii, and mpeak values.
 func (w *TagWorker) FindParticleOwners(x [][3]float32, r, mpeak []float32) {
 	for i := int32(0); i < int32(len(x)); i++ {
-		if r[i] == -1 { continue }
+		if r[i] <= 0 { continue } // Halo doesn't exist at this snapshot
 		idx := w.finder.Find(x[i], r[i])
 		for _, j := range idx {
 			if w.Owners[j] == -1 {
@@ -138,6 +137,7 @@ func InsertOwnersInLists(workers []*TagWorker, snap int,
 
 func NewTags(nHalo int) *Tags {
 	return &Tags {
+		make([]int32, nHalo),
 		make([][]int32, nHalo),
 		make([][]int16, nHalo),
 		make([][]uint8, nHalo),
@@ -161,9 +161,42 @@ func (buf *Tags) AddChangedParticles(
 		if idxList.next[idx] != listEnd { flagi = uint8(1) }
 		
 		if snapi == snap32 {
-			buf.Idx[haloi] = append(buf.Idx[haloi], ids[i])
+			buf.ID[haloi] = append(buf.ID[haloi], ids[i])
 			buf.Snap[haloi] = append(buf.Snap[haloi], snap16)
 			buf.Flag[haloi] = append(buf.Flag[haloi], flagi)
 		}
+	}
+}
+
+
+// OrderTags orders the elements of Idx, Snap, and Flag so that all the 0-tag
+// particles are first and all the 1-tag particles are the 
+func OrderTags(tags *Tags) {
+	tags.N0 = make([]int32, len(tags.Flag))
+	for i := range tags.Flag {
+		newID := make([]int32, len(tags.Flag[i]))
+		newSnap := make([]int16, len(tags.Flag[i]))
+		newFlag := make([]uint8, len(tags.Flag[i]))
+
+		for j := range tags.Flag[i] {
+			if tags.Flag[i][j] == 0 { tags.N0[i]++ }
+		}
+
+		k0, k1 := 0, tags.N0[i]
+		for j := range tags.Flag[i] {
+			if tags.Flag[i][j] == 0 {
+				newID[k0] = tags.ID[i][j]
+				newSnap[k0] = tags.Snap[i][j]
+				newFlag[k0] = tags.Flag[i][j]
+				k0++
+			} else {
+				newID[k1] = tags.ID[i][j]
+				newSnap[k1] = tags.Snap[i][j]
+				newFlag[k1] = tags.Flag[i][j]
+				k1++
+			}
+		}
+
+		tags.ID[i], tags.Snap[i], tags.Flag[i] = newID, newSnap, newFlag
 	}
 }

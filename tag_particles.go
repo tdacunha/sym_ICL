@@ -10,14 +10,9 @@ import (
 )
 
 var (
+	// What level in the file are the HR particles stored at?
 	HRLevel = 1
-	RunProfile = true
-	ProfFileName = "profiling/tag_particles.prof"
-)
-
-const (
 	NFiles = 8
-	MaxSnap = 235
 )
 
 func main() {
@@ -49,25 +44,26 @@ func TagHalo(cfg *lib.Config, cfgi int) {
 	baseDir, snapFmt := cfg.BaseDir[cfgi], cfg.SnapFormat[cfgi]
 	
 	mergers := lib.ReadMergers(lib.MergerFileName(baseDir))
+	maxSnap := len(mergers.Rvir)
 	mpeak := CalcMpeak(mergers)
 	
 	tags := lib.NewTags(mergers.Haloes)
 	
 	nWorkers := lib.SetThreads(-1)
-	fileName := fmt.Sprintf(snapFmt, MaxSnap, 0)
+	fileName := fmt.Sprintf(snapFmt, maxSnap, 0)
 	header := lib.OpenGadget2Zoom(fileName, []string{"x", "v", "id32"})
 	
 	idxList := lib.NewCompactList(int32(header.NTot[HRLevel]))
 	snapList := lib.NewCompactList(int32(header.NTot[HRLevel]))
 	workers := NewWorkerArray(nWorkers, header.NTot[HRLevel], header.L)
 	
-	for snap := 0; snap <= MaxSnap; snap++ {
+	for snap := 0; snap <= maxSnap; snap++ {
 		log.Printf("Snapshot %3d", snap)
 		lib.MemoryUsage()
 		
 		hx, hr := ExtractHaloes(mergers, snap)
 		
-		for b := 0; b < 8; b++ {
+		for b := 0; b < cfg.Blocks[cfgi]; b++ {
 			log.Printf("    Block %d", b)
 
 			fileName := fmt.Sprintf(snapFmt, snap, b)
@@ -76,12 +72,12 @@ func TagHalo(cfg *lib.Config, cfgi int) {
 			TagParticles(workers, px, hx, hr, mpeak)
 			lib.InsertOwnersInLists(workers, snap, idxList, snapList, mpeak)
 			tags.AddChangedParticles(pid, idxList, snapList, snap)
-			
-			runtime.GC()
 		}
+
+		runtime.GC()
 	}
 
-	
+	lib.OrderTags(tags)
 	lib.WriteTags(baseDir, NFiles, tags)
 }
 

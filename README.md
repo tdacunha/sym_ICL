@@ -52,3 +52,23 @@ The steps are the following:
   their infall times and other useful information
 - `xv.go` - Extracts x and v for all major subhalos.
 - `phi.go` - Computes potentials for all major subhalos.
+
+The first three are responsible for building up files related to merger trees
+and the last three are reponsible for tracking paritcles over time. The tree
+scripts don't require any particle access and are vastly cheaper to run, so
+you may be interested in running them on their own. `phi.go` is by far the
+most expensive and most niche, so you may not want to run it even if you're
+doing particle tracking.
+
+For the particle tracking files, you'll want to check what level your
+highest-reoslution particles are in your simulations (Symphony has them in
+Gadget's 1-indexed level, so that's the default).0 If you don't still have the 
+original IC configuraiton files lying around, you can check by opening up the
+gadget files and seeing which level is the first to have any particles
+(using, say, github.com/phil-mansfield/read_gadget.) Once you know that, change
+`HRLevel` at the top of those files, if needed.
+
+You may also want to change the number of files that particles are split across.
+By default, this number is 8. But you can increase it if this would lead to 
+particle files that are too large to comfortably hold in RAM at one time.
+

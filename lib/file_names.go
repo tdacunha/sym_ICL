@@ -51,21 +51,21 @@ func TreeFileNames(baseDir string) []string {
 	return out
 }
 
-func TagDirName(baseDir string) string {
-	return path.Join(ParticleDirName(baseDir), "tags")
-}
+//func TagDirName(baseDir string) string {
+//	return path.Join(ParticleDirName(baseDir), "tags")
+//}
 
 func TagFileName(baseDir string, i int) string {
-	return path.Join(TagDirName(baseDir), fmt.Sprintf("tags.%d.dat", i))
+	return path.Join(ParticleDirName(baseDir), fmt.Sprintf("tags.%d.dat", i))
 }
 
-func SnapFileName(baseDir string, i int) string {
-	return path.Join(TagDirName(baseDir), fmt.Sprintf("snaps.%d.dat", i))
-}
+//func SnapFileName(baseDir string, i int) string {
+//	return path.Join(TagDirName(baseDir), fmt.Sprintf("snaps.%d.dat", i))
+//}
 
-func FlagFileName(baseDir string, i int) string {
-	return path.Join(TagDirName(baseDir), fmt.Sprintf("flags.%d.dat", i))
-}
+//func FlagFileName(baseDir string, i int) string {
+//	return path.Join(TagDirName(baseDir), fmt.Sprintf("flags.%d.dat", i))
+//}
 
 func VarFileName(baseDir, varName string, snap, i int) string {
 	return path.Join(SnapDirName(baseDir, snap),
