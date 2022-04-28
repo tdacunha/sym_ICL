@@ -59,6 +59,10 @@ func TagFileName(baseDir string, i int) string {
 	return path.Join(ParticleDirName(baseDir), fmt.Sprintf("tags.%d.dat", i))
 }
 
+func TagLookupName(baseDir string) string {
+	return path.Join(ParticleDirName(baseDir), "tags.lookup_table.dat")
+}
+
 //func SnapFileName(baseDir string, i int) string {
 //	return path.Join(TagDirName(baseDir), fmt.Sprintf("snaps.%d.dat", i))
 //}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"time"
 	"fmt"
 	"log"
 	"os"
@@ -44,7 +45,8 @@ func TagHalo(cfg *lib.Config, cfgi int) {
 	baseDir, snapFmt := cfg.BaseDir[cfgi], cfg.SnapFormat[cfgi]
 	
 	mergers := lib.ReadMergers(lib.MergerFileName(baseDir))
-	maxSnap := len(mergers.Rvir)
+
+	maxSnap := len(mergers.Rvir[0]) - 1
 	mpeak := CalcMpeak(mergers)
 	
 	tags := lib.NewTags(mergers.Haloes)
@@ -57,28 +59,52 @@ func TagHalo(cfg *lib.Config, cfgi int) {
 	snapList := lib.NewCompactList(int32(header.NTot[HRLevel]))
 	workers := NewWorkerArray(nWorkers, header.NTot[HRLevel], header.L)
 	
+	var (
+		dt1, dt2, dt3, dt4 time.Duration
+	)
+
 	for snap := 0; snap <= maxSnap; snap++ {
 		log.Printf("Snapshot %3d", snap)
-		lib.MemoryUsage()
+		if snap % 10 == 0 {
+			lib.MemoryUsage()
+			log.Printf(`
+    Reading:   %.2f
+    Tagging:   %.2f
+    Inserting: %.2f
+    Combining: %.2f
+`, float64(dt1)/1e9, float64(dt2)/1e9, float64(dt3)/1e9, float64(dt4)/1e9,
+			)
+		}
 		
 		hx, hr := ExtractHaloes(mergers, snap)
-		
+
 		for b := 0; b < cfg.Blocks[cfgi]; b++ {
-			log.Printf("    Block %d", b)
-
 			fileName := fmt.Sprintf(snapFmt, snap, b)
+			t0 := time.Now()
 			px, pid := ReadLevel(fileName, HRLevel)
-			
-			TagParticles(workers, px, hx, hr, mpeak)
-			lib.InsertOwnersInLists(workers, snap, idxList, snapList, mpeak)
-			tags.AddChangedParticles(pid, idxList, snapList, snap)
-		}
 
+			t1 := time.Now()
+			TagParticles(workers, px, pid, hx, hr, mpeak)
+			t2 := time.Now()
+			lib.InsertOwnersInLists(workers, snap, idxList, snapList, mpeak)
+			t3 := time.Now()
+			tags.AddChangedParticles(idxList, snapList, snap)
+			t4 := time.Now()
+
+			dt1 += t1.Sub(t0)
+			dt2 += t2.Sub(t1)
+			dt3 += t3.Sub(t2)
+			dt4 += t4.Sub(t3)
+		}
 		runtime.GC()
 	}
 
 	lib.OrderTags(tags)
-	lib.WriteTags(baseDir, NFiles, tags)
+	lookup := lib.NewTagLookup(header.NTot[HRLevel])
+	lookup.AddTags(tags)
+	lib.WriteTags(baseDir, NFiles, tags, lookup)
+
+	EstimateSpaceSavings(tags)
 }
 
 func ExtractHaloes(m *lib.Mergers, snap int) (hx [][3]float32, hr []float32) {
@@ -91,18 +117,19 @@ func ExtractHaloes(m *lib.Mergers, snap int) (hx [][3]float32, hr []float32) {
 
 func NewWorkerArray(nWorkers, nTot int, L float64) []*lib.TagWorker {
 	workers := make([]*lib.TagWorker, nWorkers)
-	lib.ThreadSplitArray(nTot, nTot, func(worker, start, end, step int) {
+	lib.ThreadSplitArray(nTot, nWorkers, func(worker, start, end, step int) {
 		workers[worker] = lib.NewTagWorker(float32(L), start, end, step)
 	})
 	return workers
 }
 
 func TagParticles(
-	w []*lib.TagWorker, px, hx [][3]float32, hr, mpeak []float32,
+	w []*lib.TagWorker, px [][3]float32, pid []int32,
+	hx [][3]float32, hr, mpeak []float32,
 ) {
-	
-	lib.ThreadSplitArray(len(w), len(w), func(worker, _, _, _ int) {
-		w[worker].LoadParticles(px)
+	lib.ThreadSplitArray(len(px), len(w), func(worker, start, end, skip int) {
+		w[worker].ResetBounds(start, end, skip)
+		w[worker].LoadParticles(px, pid)
 		w[worker].FindParticleOwners(hx, hr, mpeak)
 	})
 }
@@ -122,7 +149,25 @@ func ReadLevel(fileName string, level int) (xp [][3]float32, idp []int32) {
 func CalcMpeak(m *lib.Mergers) []float32 {
 	mpeak := make([]float32, len(m.Mvir))
 	for i := range mpeak {
-		lib.Mpeak(m.Mvir[i])
+		mpeak[i] = lib.Mpeak(m.Mvir[i])
 	}
 	return mpeak
+}
+
+func EstimateSpaceSavings(tags *lib.Tags) {
+	nTot, n0 := 0, 0
+	n0Infall := 0
+	for i := range tags.Snap {
+		nTot += len(tags.Snap[i])
+		n0 += int(tags.N0[i])
+		
+		for j := range tags.Snap[i] {
+			n0Infall += 236 - int(tags.Snap[i][j])
+		}
+	}
+
+	f0 := float64(n0) / float64(nTot)
+	fInfall := float64(n0Infall) / (236*float64(n0))
+	log.Printf("f0 = %.3f, fin = %.3f, ftot = %.3f",
+		f0, fInfall, 0.5*f0*fInfall)
 }
