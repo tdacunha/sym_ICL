@@ -193,34 +193,95 @@ func (buf *Tags) AddChangedParticles(idxList, snapList *CompactList, snap int) {
 
 // OrderTags orders the elements of Idx, Snap, and Flag so that all the 0-tag
 // particles are first and all the 1-tag particles are the 
-func OrderTags(tags *Tags) {
+func (tags *Tags) OrderTags() {
 	tags.N0 = make([]int32, len(tags.Flag))
 	for i := range tags.Flag {
-		newID := make([]int32, len(tags.Flag[i]))
-		newSnap := make([]int16, len(tags.Flag[i]))
-		newFlag := make([]uint8, len(tags.Flag[i]))
+		id, snap, flag := tags.ID[i], tags.Snap[i], tags.Flag[i]
 
-		for j := range tags.Flag[i] {
-			if tags.Flag[i][j] == 0 { tags.N0[i]++ }
+		for j := range flag {
+			if flag[j] == 0 { tags.N0[i]++ }
 		}
 
-		k0, k1 := 0, tags.N0[i]
-		for j := range tags.Flag[i] {
-			if tags.Flag[i][j] == 0 {
-				newID[k0] = tags.ID[i][j]
-				newSnap[k0] = tags.Snap[i][j]
-				newFlag[k0] = tags.Flag[i][j]
-				k0++
-			} else {
-				newID[k1] = tags.ID[i][j]
-				newSnap[k1] = tags.Snap[i][j]
-				newFlag[k1] = tags.Flag[i][j]
-				k1++
-			}
-		}
+		k0, k1 := 0, int(tags.N0[i])
+		n0, n1 := k1, len(tags.Flag[i])
 
-		tags.ID[i], tags.Snap[i], tags.Flag[i] = newID, newSnap, newFlag
+		for { // Loops over all swaps
+			for ; k0 < n0 && flag[k0] == 0; k0++ { }
+			if k0 == n0 { break }
+			for ; k1 < n1 && flag[k1] == 1; k1++ { }
+			if k1 == n1 { break }
+		
+			flag[k0], flag[k1] = flag[k1], flag[k0]
+			snap[k0], snap[k1] = snap[k1], snap[k0]
+			id[k0], id[k1] = id[k1], id[k0]
+		}
 	}
+}
+
+// TrimFloat filters an array of floating point values to only contain values
+// with infall snapshots at or before the given snapshot
+func (tags *Tags) TrimFloat(iHalo int, x []float32, snap int) []float32 {
+	j := 0
+	snap16 := int16(snap)
+	for i := range x {
+		if tags.Snap[iHalo][i] <= snap16 {
+			x[j] = x[i]
+			j++
+		}
+	}
+	return x[:j]
+	
+}
+
+// TrimFloat filters an array of vectors to only contain values
+// with infall snapshots at or before the given snapshot.
+func (tags *Tags) TrimVector(iHalo int, x [][3]float32, snap int) [][3]float32 {
+	j := 0
+	snap16 := int16(snap)
+	for i := range x {
+		if tags.Snap[iHalo][i] <= snap16 {
+			x[j] = x[i]
+			j++
+		}
+	}
+	return x[:j]
+}
+
+func (tags *Tags) ExpandFloat(
+	iHalo int, x []float32, snap int, fill float32) []float32 {
+	j := len(x) - 1
+	snap16 := int16(snap)
+	x = append(x, make([]float32, len(tags.Snap[iHalo]) - len(x))...)
+	
+	for i := len(x) - 1; i >= 0; i-- {
+		if tags.Snap[iHalo][i] <= snap16 {
+			x[i] = x[j]
+			j--
+		} else {
+			x[i] = fill
+		}
+	}
+
+	return x
+}
+
+func (tags *Tags) ExpandVector(
+	iHalo int, x [][3]float32, snap int, fill [3]float32) [][3]float32 {
+
+	j := len(x) - 1
+	snap16 := int16(snap)
+	x = append(x, make([][3]float32, len(tags.Snap[iHalo]) - len(x))...)
+	
+	for i := len(x) - 1; i >= 0; i-- {
+		if tags.Snap[iHalo][i] <= snap16 {
+			x[i] = x[j]
+			j--
+		} else {
+			x[i] = fill
+		}
+	}
+
+	return x
 }
 
 type TagLookup struct {
