@@ -44,7 +44,9 @@ You'll probably want to do test runs in an interactive session to make sure
 everything is working okay. If so, you cna specify the index of the halo you
 want to look at as
 
-``` go <file_name>.go path/to/config.txt <index> ```
+```
+go run <file_name>.go path/to/config.txt <index>
+```
 
 I'd recommend using the halo with the smallest tree files.
 
