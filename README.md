@@ -2,12 +2,14 @@
 
 First, create a directory in `configs/`
 
-``` mkdir configs/MW_mass
+``` 
+mkdir configs/MW_mass
 ```
 
 Next, run the following commands to diagnose any early issues (replacing the `/oak/stanford/orgs/kipac/users/ycwang19/ZEUS/MWmass_new/Halo*` substring with one that accesses all your halo directories)
 
-``` ls /oak/stanford/orgs/kipac/users/ycwang19/ZEUS/MWmass_new/Halo*/output/rockstar/trees/ > configs/MW_mass/tree_locations.txt
+``` 
+ls /oak/stanford/orgs/kipac/users/ycwang19/ZEUS/MWmass_new/Halo*/output/rockstar/trees/ > configs/MW_mass/tree_locations.txt
 du -h /oak/stanford/orgs/kipac/users/ycwang19/ZEUS/MWmass_new/Halo*/output/rockstar/trees/ > configs/MW_mass/tree_sizes.txt
 head -n 1 /oak/stanford/orgs/kipac/users/ycwang19/ZEUS/MWmass_new/Halo*/output/rockstar/trees/tree_0_0_0.dat > MW_mass/tree_headers.txt
 ```
@@ -22,16 +24,21 @@ If you have any headers that don't look like this, contact me (Phil) and I'll ch
 
 Next, copy the Python script print_config.py into your config folder
 
-``` cp print_config.py configs/MW_mass
+``` 
+cp print_config.py configs/MW_mass
 ```
 
 Open the file and edit all the lines which have a comment in front of them to match your simulation specifics. You'll need to be familiar with `"%s"`-style printf formatting, but might be able to pattern-match off the examples if you aren't. You'll also need to manually list the halo names: I'd recommend having your `tree_locations.txt` file open in another tab list while you do this. Next, run the Python script and pipe the output to the main config file.
 
-``` python configs/MW_mass/print_config.py > configs/MW_mass/config.txt ```
+```
+python configs/MW_mass/print_config.py > configs/MW_mass/config.txt
+```
 
 Now you're ready to start running the pipeline. You run a series of commands as
 
-``` go <file_name>.go path/to/config.txt ```
+```
+go run <file_name>.go path/to/config.txt
+```
 
 You'll probably want to do test runs in an interactive session to make sure
 everything is working okay. If so, you cna specify the index of the halo you
