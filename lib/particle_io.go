@@ -267,7 +267,9 @@ func WriteVector(
 			if len(x[j]) == 0 { continue }
 
 			x16, min, max := Vector32ToUint16(x[j])
-			
+
+			err = binary.Write(f, order, int64(len(x[j])))
+			if err != nil { panic(err.Error()) }
 			err = binary.Write(f, order, min)
 			if err != nil { panic(err.Error()) }
 			err = binary.Write(f, order, max)
@@ -308,8 +310,12 @@ func ReadVector(baseDir, varName string,
 				continue
 			}
 
-			xi16 := make([]uint16, 3*hd.Sizes[i])
-			xf32 := make([][3]float32, hd.Sizes[i])
+			var size int64
+			err = binary.Read(f, order, &size)
+			if err != nil { panic(err.Error()) }
+
+			xi16 := make([]uint16, 3*size)
+			xf32 := make([][3]float32, size)
 			var min, max [3]float32
 
 			err = binary.Read(f, order, &min)
@@ -357,6 +363,8 @@ func WriteFloat(
 
 			x16, min, max := Float32ToUint16(x[j])
 
+			err = binary.Write(f, order, int64(len(x[j])))
+			if err != nil { panic(err.Error()) }
 			err = binary.Write(f, order, min)
 			if err != nil { panic(err.Error()) }
 			err = binary.Write(f, order, max)
@@ -473,8 +481,12 @@ func ReadFloat(baseDir string, varName string,
 				continue
 			}
 
-			xi16 := make([]uint16, hd.Sizes[i])
-			xf32 := make([]float32, hd.Sizes[i])
+			var size int64
+			err = binary.Read(f, order, &size)
+			if err != nil { panic(err.Error()) }
+
+			xi16 := make([]uint16, size)
+			xf32 := make([]float32, size)
 			var min, max float32
 
 			err = binary.Read(f, order, &min)

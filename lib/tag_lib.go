@@ -229,8 +229,7 @@ func (tags *Tags) TrimFloat(iHalo int, x []float32, snap int) []float32 {
 			j++
 		}
 	}
-	return x[:j]
-	
+	return x[:j]	
 }
 
 // TrimFloat filters an array of vectors to only contain values
