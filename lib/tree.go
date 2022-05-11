@@ -143,6 +143,7 @@ type Branches struct {
 	Starts, Ends []int32
 	IsReal, IsDisappear, IsMWSub []bool
 	PreprocessIdx []int32
+	PreprocessSnap []int32
 }
 
 func ReadBranches(name string) *Branches {
@@ -162,6 +163,7 @@ func ReadBranches(name string) *Branches {
 	b.IsDisappear = make([]bool, b.N)
 	b.IsMWSub = make([]bool, b.N)
 	b.PreprocessIdx = make([]int32, b.N)
+	b.PreprocessSnap = make([]int32, b.N)
 	
 	err = binary.Read(f, ByteOrder, edges)
 	if err != nil { panic(err.Error()) }
@@ -175,6 +177,8 @@ func ReadBranches(name string) *Branches {
 	if err != nil { panic(err.Error()) }
 	err = binary.Read(f, ByteOrder, b.PreprocessIdx)
 	if err != nil { panic(err.Error()) }
-	
+	err = binary.Read(f, ByteOrder, b.PreprocessSnap)
+	if err != nil { panic(err.Error()) }
+
 	return b
 }

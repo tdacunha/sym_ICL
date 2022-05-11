@@ -2,12 +2,14 @@
 
 First, create a directory in `configs/`
 
-``` mkdir configs/MW_mass
+``` 
+mkdir configs/MW_mass
 ```
 
 Next, run the following commands to diagnose any early issues (replacing the `/oak/stanford/orgs/kipac/users/ycwang19/ZEUS/MWmass_new/Halo*` substring with one that accesses all your halo directories)
 
-``` ls /oak/stanford/orgs/kipac/users/ycwang19/ZEUS/MWmass_new/Halo*/output/rockstar/trees/ > configs/MW_mass/tree_locations.txt
+``` 
+ls /oak/stanford/orgs/kipac/users/ycwang19/ZEUS/MWmass_new/Halo*/output/rockstar/trees/ > configs/MW_mass/tree_locations.txt
 du -h /oak/stanford/orgs/kipac/users/ycwang19/ZEUS/MWmass_new/Halo*/output/rockstar/trees/ > configs/MW_mass/tree_sizes.txt
 head -n 1 /oak/stanford/orgs/kipac/users/ycwang19/ZEUS/MWmass_new/Halo*/output/rockstar/trees/tree_0_0_0.dat > MW_mass/tree_headers.txt
 ```
@@ -22,22 +24,29 @@ If you have any headers that don't look like this, contact me (Phil) and I'll ch
 
 Next, copy the Python script print_config.py into your config folder
 
-``` cp print_config.py configs/MW_mass
+``` 
+cp print_config.py configs/MW_mass
 ```
 
 Open the file and edit all the lines which have a comment in front of them to match your simulation specifics. You'll need to be familiar with `"%s"`-style printf formatting, but might be able to pattern-match off the examples if you aren't. You'll also need to manually list the halo names: I'd recommend having your `tree_locations.txt` file open in another tab list while you do this. Next, run the Python script and pipe the output to the main config file.
 
-``` python configs/MW_mass/print_config.py > configs/MW_mass/config.txt ```
+```
+python configs/MW_mass/print_config.py > configs/MW_mass/config.txt
+```
 
 Now you're ready to start running the pipeline. You run a series of commands as
 
-``` go <file_name>.go path/to/config.txt ```
+```
+go run <file_name>.go path/to/config.txt
+```
 
 You'll probably want to do test runs in an interactive session to make sure
 everything is working okay. If so, you cna specify the index of the halo you
 want to look at as
 
-``` go <file_name>.go path/to/config.txt <index> ```
+```
+go run <file_name>.go path/to/config.txt <index>
+```
 
 I'd recommend using the halo with the smallest tree files.
 
@@ -52,3 +61,23 @@ The steps are the following:
   their infall times and other useful information
 - `xv.go` - Extracts x and v for all major subhalos.
 - `phi.go` - Computes potentials for all major subhalos.
+
+The first three are responsible for building up files related to merger trees
+and the last three are reponsible for tracking paritcles over time. The tree
+scripts don't require any particle access and are vastly cheaper to run, so
+you may be interested in running them on their own. `phi.go` is by far the
+most expensive and most niche, so you may not want to run it even if you're
+doing particle tracking.
+
+For the particle tracking files, you'll want to check what level your
+highest-reoslution particles are in your simulations (Symphony has them in
+Gadget's 1-indexed level, so that's the default).0 If you don't still have the 
+original IC configuraiton files lying around, you can check by opening up the
+gadget files and seeing which level is the first to have any particles
+(using, say, github.com/phil-mansfield/read_gadget.) Once you know that, change
+`HRLevel` at the top of those files, if needed.
+
+You may also want to change the number of files that particles are split across.
+By default, this number is 8. But you can increase it if this would lead to 
+particle files that are too large to comfortably hold in RAM at one time.
+

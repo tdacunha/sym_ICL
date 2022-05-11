@@ -1,7 +1,6 @@
 package lib
 
 import (
-	"fmt"
 	"os"
 	"encoding/binary"
 	"math"
@@ -17,7 +16,7 @@ type Mergers struct {
 	Haloes, Snaps int
 	Index []int32
 	// left index goes over haloes, right goes over snapshots.
-	Mvir, Rvir, Vmax [][]float32
+	Mvir, Rvir, Vmax, RVmax [][]float32
 	ID [][]int32
 	X, V [][][3]float32
 }
@@ -84,8 +83,6 @@ func ReadMergers(fname string) *Mergers {
 	m.Index = make([]int32, nh)
 	binaryRead(f, m.Index)
 
-	fmt.Println(m.Index)
-
 	m.Mvir = make([][]float32, nh)
 	m.Rvir = make([][]float32, nh)
 	for i := 0; i < nh; i++ {
@@ -108,20 +105,21 @@ func ReadMergers(fname string) *Mergers {
 		binaryRead(f, m.Vmax[i])
 	}
 
+	m.RVmax = make([][]float32, nh)
+	for i := 0; i < nh; i++ {
+		m.RVmax[i] = make([]float32, ns)
+		binaryRead(f, m.RVmax[i])
+	}
+
 	m.ID = make([][]int32, nh)
 	for i := 0; i < nh; i++ {
 		m.ID[i] = make([]int32, ns)
 		binaryRead(f, m.ID[i])
 	}
 
-	off, _ := f.Seek(0, 1)
-	fmt.Println(off)
 	m.X = make([][][3]float32, nh)
 	for i := 0; i < nh; i++ {
 		m.X[i] = binaryReadVector(f, ns)
-		if i == 0 {
-			fmt.Printf("%.3f\n", m.X[i][len(m.X[i]) - 1])
-		}
 	}
 
 	m.V = make([][][3]float32, nh)

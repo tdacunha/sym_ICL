@@ -14,5 +14,5 @@ func MemoryUsage() {
 		float64(m.Alloc)/1e9, float64(m.TotalAlloc)/1e9,
 		float64(m.HeapIdle)/1e9)
 	log.Printf("    Next GC cycle: %5.2f GB, GC pause time: %.2f s",
-		float64(m.NextGC)/1e9, float64(m.PauseTotalNs)*1e9)
+		float64(m.NextGC)/1e9, float64(m.PauseTotalNs)/1e9)
 }

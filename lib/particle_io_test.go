@@ -6,34 +6,55 @@ import (
 
 func TestReadTags(t *testing.T) {
 	tags := &Tags{
-		Idx: [][]int32{
+		N0: []int32{ 1, 1, 0, 3, 0 },
+		ID: [][]int32{
 			{1, 2},
 			{3},
+			{ },
 			{4, 5, 6, 7, 8},
 			{9},
 		},
 		Snap: [][]int16{
 			{0, 1},
 			{0},
+			{ },
 			{0, 1, 2, 3, 4},
 			{0},
 		},
 		Flag: [][]uint8{
 			{0, 0},
 			{1},
+			{ },
 			{2, 2, 2, 2, 2},
 			{3},
 		},
 	}
 
-	WriteTags("test_dir", 3, tags)
+	lookup := &TagLookup{
+		Halo: make([]int16, 100),
+		Index: make([]int32, 100),
+	}
+
+	for i := range lookup.Halo {
+		lookup.Halo[i] = int16(i % 5)
+		lookup.Index[i] = int32(i % 21)
+	}
+
+	WriteTags("test_dir", 3, tags, lookup)
 	hd := ReadParticleHeader("test_dir")
 	rTags := ReadTags("test_dir", hd)
 
-	if !Int32Eq2D(tags.Idx, rTags.Idx) ||
+	if !Int32Eq(tags.N0, rTags.N0) ||
+		!Int32Eq2D(tags.ID, rTags.ID) ||
 		!Int16Eq2D(tags.Snap, rTags.Snap) ||
 		!Uint8Eq2D(tags.Flag, rTags.Flag) {
 		t.Errorf("Wrote tags: %v, but read tags %v", tags, rTags)
+	}
+
+	rLookup := ReadTagLookup("test_dir")
+	if !Int32Eq(lookup.Index, rLookup.Index) ||
+		!Int16Eq(lookup.Halo, rLookup.Halo) {
+		t.Errorf("Wrote lookup: %v, but read lookup %v", lookup, rLookup)
 	}
 }
 
@@ -43,6 +64,7 @@ func TestReadFloat(t *testing.T) {
 	x := [][]float32{
 		{1.0, 2.0},
 		{3.0},
+		{ },
 		{4.0, 5.0, 6.0, 7.0, 8.0},
 		{9.0},
 	}
@@ -51,7 +73,7 @@ func TestReadFloat(t *testing.T) {
 	hd := ReadParticleHeader("test_dir")
 	rx:= ReadFloat("test_dir", "test_float", snap, hd)
 
-	if !Float32Eq2D(x, rx, 0) {
+	if !Float32Eq2D(x, rx, 1e-3) {
 		t.Errorf("Wrote floats %v, but read floats %v", x, rx)
 	}
 }
@@ -62,6 +84,7 @@ func TestReadVector(t *testing.T) {
 	x := [][][3]float32{
 		[][3]float32{{1,1,1}, {2,2,2}},
 		[][3]float32{{3,3,3}},
+		[][3]float32{ },
 		[][3]float32{{4,4,4}, {5,5,5}, {6,6,6}, {7,7,7}, {8,8,8}},
 		[][3]float32{{9,9,9}},
 	}
@@ -70,7 +93,7 @@ func TestReadVector(t *testing.T) {
 	hd := ReadParticleHeader("test_dir")
 	rx:= ReadVector("test_dir", "test_vector", snap, hd)
 
-	if !Vec32Eq2D(x, rx, 0) {
+	if !Vec32Eq2D(x, rx, 1e-3) {
 		t.Errorf("Wrote vectors %v, but read vectors %v", x, rx)
 	}
 }

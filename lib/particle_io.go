@@ -2,6 +2,7 @@ package lib
 
 import (
 	"math"
+	"math/rand"
 	"os"
 	"fmt"
 	"encoding/binary"
@@ -21,6 +22,7 @@ type ParticleHeader struct {
 	Offsets []int32 // Starting index of a given halo in its file
 	Sizes []int32 // Number of particles associated with the halo
 	FileIdxs []int32 // Which file the halo is in
+	N0 []int32 // The number of flag=0 particles in the halo.
 }
 
 // ReadParticleHeader reads the header file containng the number of files,
@@ -46,7 +48,8 @@ func ReadParticleHeader(baseDir string) *ParticleHeader {
 	hd.Offsets = make([]int32, hd.NHalo)
 	hd.Sizes = make([]int32, hd.NHalo)
 	hd.FileIdxs = make([]int32, hd.NHalo)
-	
+	hd.N0 = make([]int32, hd.NHalo)
+
 	if err != nil { panic(err.Error()) }
 	err = binary.Read(fHeader, order, hd.FileLengths)
 	if err != nil { panic(err.Error()) }
@@ -56,15 +59,18 @@ func ReadParticleHeader(baseDir string) *ParticleHeader {
 	if err != nil { panic(err.Error()) }
 	err = binary.Read(fHeader, order, hd.FileIdxs)
 	if err != nil { panic(err.Error()) }
+	err = binary.Read(fHeader, order, hd.N0)
 
 	return hd
 }
 
 // Tags is a collection of informaiton
 type Tags struct {
-	Idx [][]int32
-	Snap [][]int16
-	Flag [][]uint8
+	N0 []int32 // Number of Flag = 0 particles for each halo
+	ID [][]int32 // ID of each particles
+	Snap [][]int16 // Snapshot of each particle
+	Flag [][]uint8 // 0 -> belonged to this halo first, 1 ->
+	               // belonged to a less massive halo first
 }
 
 // ReadAllTags reads the tags associated with all tracked haloes.
@@ -73,112 +79,122 @@ func ReadTags(baseDir string, hd *ParticleHeader) *Tags {
 	i := 0 // indexes over all haloes
 
 	tags := &Tags{
-		Idx: make([][]int32, hd.NHalo),
+		ID: make([][]int32, hd.NHalo),
 		Snap: make([][]int16, hd.NHalo),
 		Flag: make([][]uint8, hd.NHalo),
 	}
 	
 	for iFile := 0; iFile < int(hd.NFile); iFile++ {
-		fIdx, err := os.Open(TagFileName(baseDir, iFile))
+		f, err := os.Open(TagFileName(baseDir, iFile))
 		if err != nil { panic(err.Error()) }
-		fSnap, err := os.Open(SnapFileName(baseDir, iFile))
-		if err != nil { panic(err.Error()) }
-		fFlag, err := os.Open(FlagFileName(baseDir, iFile))	
-		if err != nil { panic(err.Error()) }
-
-		idx := make([]int32, hd.FileLengths[iFile])
-		snap := make([]int16, hd.FileLengths[iFile])
-		flag := make([]uint8, hd.FileLengths[iFile])
-		
-		err = binary.Read(fIdx, order, idx)
-		if err != nil { panic(err.Error()) }
-		err = binary.Read(fSnap, order, snap)
-		if err != nil { panic(err.Error()) }
-		err = binary.Read(fFlag, order, flag)
-		if err != nil { panic(err.Error()) }
-		
-		fIdx.Close()
-		fSnap.Close()
-		fFlag.Close()
 
 		for ; i < len(hd.FileIdxs) &&  hd.FileIdxs[i] == int32(iFile); i++ {
-			start, end := hd.Offsets[i], hd.Offsets[i] + hd.Sizes[i]
-			tags.Idx[i] = idx[start: end]
-			tags.Snap[i] = snap[start: end]
-			tags.Flag[i] = flag[start: end]
+			n := hd.Sizes[i]
+
+			id := make([]int32, n)
+			snap := make([]int16, n)
+			flag := make([]uint8, n)
+
+			err = binary.Read(f, order, id)
+			if err != nil { panic(err.Error()) }
+			err = binary.Read(f, order, snap)
+			if err != nil { panic(err.Error()) }
+			err = binary.Read(f, order, flag)
+			if err != nil { panic(err.Error()) }
+
+			tags.ID[i] = id
+			tags.Snap[i] = snap
+			tags.Flag[i] = flag
 		}
+
+		f.Close()
 	}
+
+	tags.N0 = hd.N0
 
 	return tags
 }
 
+func ReadTagLookup(baseDir string) *TagLookup {
+	f, err := os.Open(TagLookupName(baseDir))
+	if err != nil { panic(err.Error()) }
+
+	order := binary.LittleEndian
+
+	np := int32(0)
+	err = binary.Read(f, order, &np)
+	if err != nil { panic(err.Error()) }
+
+	l := &TagLookup{
+		Halo: make([]int16, np),
+		Index: make([]int32, np),
+	}
+
+	err = binary.Read(f, order, l.Halo)
+	if err != nil { panic(err.Error()) }
+	err = binary.Read(f, order, l.Index)
+	if err != nil { panic(err.Error()) }
+
+	return l
+}
+
 // WriteTags writes tags and other particle information to nFiles files to the
-// correct location in baseDir. Each element in teh three arrays correspond to
-// a different halo in the mergers.dat file. idxs is a an array of indices to
+// correct location in baseDir. Each element in the three arrays correspond to
+// a different halo in the subhalos.dat file. idxs is a an array of indices to
 // the particles in the halo. snaps is an array of the first snapshot that those
 // particles entered that halo, and flags is flags containing information about
 // the particle.
-func WriteTags(baseDir string, nFiles int, tags *Tags) {
+func WriteTags(baseDir string, nFiles int, tags *Tags, l *TagLookup) {
 	MaybeMkdir(ParticleDirName(baseDir))
-	MaybeMkdir(TagDirName(baseDir))
 	
-	idxs, snaps, flags := tags.Idx, tags.Snap, tags.Flag
+	ids, snaps, flags := tags.ID, tags.Snap, tags.Flag
 	
 	order := binary.LittleEndian
 	
 	// Find target number of particles per file.
 	nTot := 0
-	for i := range idxs { nTot += len(idxs[i]) }
+	for i := range ids { nTot += len(ids[i]) }
 	nPerFile := int(math.Ceil(float64(nTot)/float64(nFiles)))
 	
 	fileLengths := []int32{ }
-	offsets, sizes := make([]int32, len(idxs)), make([]int32, len(idxs))
-	fileIdxs := make([]int32, len(idxs))
+	offsets, sizes := make([]int32, len(ids)), make([]int32, len(ids))
+	fileIdxs := make([]int32, len(ids))
 
 	j := 0 // Indexes over haloes
 	totalLen := 0 // Total number of particles
 	for iFile := 0; iFile < nFiles; iFile++ {
 		fileLen := 0 // number of tags per file
 
-		// Create files
-		fTag, err := os.Create(TagFileName(baseDir, iFile))
-		if err != nil { panic(err.Error()) }
-		fSnap, err := os.Create(SnapFileName(baseDir, iFile))
-		if err != nil { panic(err.Error()) }
-		fFlag, err := os.Create(FlagFileName(baseDir, iFile))	
-		if err != nil { panic(err.Error()) }
+		f, err := os.Create(TagFileName(baseDir, iFile))
 		
-		for ; j < len(idxs) && totalLen < (iFile+1)*nPerFile; j++{
-			err = binary.Write(fTag, order, idxs[j])
+		for ; j < len(ids) && totalLen < (iFile+1)*nPerFile; j++{
+			err = binary.Write(f, order, ids[j])
 			if err != nil { panic(err.Error()) }
-			err = binary.Write(fSnap, order, snaps[j])
+			err = binary.Write(f, order, snaps[j])
 			if err != nil { panic(err.Error()) }
-			err = binary.Write(fFlag, order, flags[j])
+			err = binary.Write(f, order, flags[j])
 			if err != nil { panic(err.Error()) }
 			
 			// Log information into particle header arrays
 			offsets[j] = int32(fileLen)
-			sizes[j] = int32(len(idxs[j]))
+			sizes[j] = int32(len(ids[j]))
 			fileIdxs[j] = int32(iFile)
 
-			fileLen += len(idxs[j])
-			totalLen += len(idxs[j])
+			fileLen += len(ids[j])
+			totalLen += len(ids[j])
 		}
 
 		fileLengths = append(fileLengths, int32(fileLen))
 
-		fTag.Close()
-		fSnap.Close()
-		fFlag.Close()
+		f.Close()
 	}
 
 	fHeader, err := os.Create(ParticleHeaderName(baseDir))
 	if err != nil { panic(err.Error()) }
-	defer fHeader.Close()
 
 	err = binary.Write(fHeader, order, int32(nFiles))
 	if err != nil { panic(err.Error()) }
-	err = binary.Write(fHeader, order, int32(len(idxs)))
+	err = binary.Write(fHeader, order, int32(len(ids)))
 	if err != nil { panic(err.Error()) }
 	err = binary.Write(fHeader, order, int32(totalLen))
 	if err != nil { panic(err.Error()) }
@@ -190,6 +206,22 @@ func WriteTags(baseDir string, nFiles int, tags *Tags) {
 	if err != nil { panic(err.Error()) }
 	err = binary.Write(fHeader, order, fileIdxs)
 	if err != nil { panic(err.Error()) }
+	err = binary.Write(fHeader, order, tags.N0)
+	if err != nil { panic(err.Error()) }
+
+	fHeader.Close()
+
+	f, err := os.Create(TagLookupName(baseDir))
+	if err != nil { panic(err.Error()) }
+
+	err = binary.Write(f, order, int32(len(l.Halo)))
+	if err != nil { panic(err.Error()) }
+	err = binary.Write(f, order, l.Halo)
+	if err != nil { panic(err.Error()) }
+	err = binary.Write(f, order, l.Index)
+	if err != nil { panic(err.Error()) }
+
+	f.Close()
 }
 
 func fileExists(name string) bool {
@@ -232,7 +264,15 @@ func WriteVector(
 		if err != nil { panic(err.Error()) }
 		
 		for ; j < len(x) && totalLen < (iFile+1)*nPerFile; j++{
-			err = binary.Write(f, order, x[j])
+			if len(x[j]) == 0 { continue }
+
+			x16, min, max := Vector32ToUint16(x[j])
+			
+			err = binary.Write(f, order, min)
+			if err != nil { panic(err.Error()) }
+			err = binary.Write(f, order, max)
+			if err != nil { panic(err.Error()) }
+			err = binary.Write(f, order, x16)
 			if err != nil { panic(err.Error()) }
 
 			totalLen += len(x[j])
@@ -262,18 +302,28 @@ func ReadVector(baseDir, varName string,
 				VarFileName(baseDir, varName, snap, i)))
 		}
 
-		
-		xi := make([][3]float32, hd.FileLengths[iFile])
-		
-		err = binary.Read(f, order, xi)
-		if err != nil { panic(err.Error()) }
-		
-		f.Close()
-
 		for ; i < len(hd.FileIdxs) &&  hd.FileIdxs[i] == int32(iFile); i++ {
-			start, end := hd.Offsets[i], hd.Offsets[i] + hd.Sizes[i]
-			x[i] = xi[start: end]
+			if hd.Sizes[i] == 0 { 
+				x[i] = [][3]float32{ }
+				continue
+			}
+
+			xi16 := make([]uint16, 3*hd.Sizes[i])
+			xf32 := make([][3]float32, hd.Sizes[i])
+			var min, max [3]float32
+
+			err = binary.Read(f, order, &min)
+			if err != nil { panic(err.Error()) }
+			err = binary.Read(f, order, &max)
+			if err != nil { panic(err.Error()) }
+			err = binary.Read(f, order, xi16)
+			if err != nil { panic(err.Error()) }
+
+			Uint16ToVector32(xi16, min, max, xf32)
+			x[i] = xf32
 		}
+				
+		f.Close()
 	}
 
 	return x
@@ -303,13 +353,101 @@ func WriteFloat(
 		if err != nil { panic(err.Error()) }
 		
 		for ; j < len(x) && totalLen < (iFile+1)*nPerFile; j++{
-			err = binary.Write(f, order, x[j])
+			if len(x[j]) == 0 { continue }
+
+			x16, min, max := Float32ToUint16(x[j])
+
+			err = binary.Write(f, order, min)
+			if err != nil { panic(err.Error()) }
+			err = binary.Write(f, order, max)
+			if err != nil { panic(err.Error()) }
+			err = binary.Write(f, order, x16)
 			if err != nil { panic(err.Error()) }
 
 			totalLen += len(x[j])
 		}
 
+
+		n0, _ := f.Seek(0, 1)
+		fmt.Println("->", n0)
+
 		f.Close()
+	}
+}
+
+func Float32ToUint16(x []float32) (out []uint16, min, max float32) {
+	min, max = x[0], x[0]
+	out = make([]uint16, len(x))
+
+	for i := 1; i < len(x); i++ {
+		if x[i] < min {
+			min = x[i]
+		} else if x[i] > max {
+			max = x[i]
+		}
+	}
+
+	dx := max - min
+	if dx == 0 { dx = 1 }
+	for i := range x {
+		ix := int(math.MaxUint16 * (x[i] - min) / dx)
+		if ix < 0 { ix = 0 }
+		if ix > math.MaxUint16 { ix = math.MaxUint16 }
+		out[i] = uint16(ix)
+	}
+
+	return out, min, max
+}
+
+func Vector32ToUint16(x [][3]float32) (out []uint16, min, max [3]float32) {
+	min, max = x[0], x[0]
+	out = make([]uint16, len(x)*3)
+
+	for i := 1; i < len(x); i++ {
+		for dim := 0; dim < 3; dim++ {
+			if x[i][dim] < min[dim] {
+				min[dim] = x[i][dim]
+			} else if x[i][dim] > max[dim] {
+				max[dim] = x[i][dim]
+			}
+		}
+	}
+
+	dx := [3]float32{ }
+	for dim := 0; dim < 3; dim++ {
+		dx[dim] = max[dim] - min[dim]
+		if dx[dim] == 0 { dx[dim] = 1 }
+	}
+	for i := range x {
+		for dim := 0; dim < 3; dim++ {
+			ix := int(math.MaxUint16 * (x[i][dim] - min[dim]) / dx[dim])
+			if ix < 0 { ix = 0 }
+			if ix > math.MaxUint16 { ix = math.MaxUint16 }
+			out[3*i+dim] = uint16(ix)
+		}
+	}
+	
+	return out, min, max
+}
+
+func Uint16ToFloat32(x []uint16, min, max float32, out []float32) {	
+	dx := max - min
+	for i := range out {
+		out[i] = dx/math.MaxUint16*(float32(x[i]) + rand.Float32()) + min
+	}
+}
+
+func Uint16ToVector32(x []uint16, min, max [3]float32, out [][3]float32) {	
+	dx := [3]float32{ }
+	for dim := 0; dim < 3; dim++ {
+		dx[dim] = max[dim] - min[dim]
+	}
+	for i := range out {
+		out[i] = [3]float32{
+			dx[0]/math.MaxUint16*(float32(x[3*i+0]) + rand.Float32()) + min[0],
+			dx[1]/math.MaxUint16*(float32(x[3*i+1]) + rand.Float32()) + min[1],
+			dx[2]/math.MaxUint16*(float32(x[3*i+2]) + rand.Float32()) + min[2],
+		}
 	}
 }
 
@@ -333,17 +471,28 @@ func ReadFloat(baseDir string, varName string,
 				VarFileName(baseDir, varName, snap, iFile)))
 		}
 
-		xi := make([]float32, hd.FileLengths[iFile])
-		
-		err = binary.Read(f, order, xi)
-		if err != nil { panic(err.Error()) }
-		
-		f.Close()
-
 		for ; i < len(hd.FileIdxs) &&  hd.FileIdxs[i] == int32(iFile); i++ {
-			start, end := hd.Offsets[i], hd.Offsets[i] + hd.Sizes[i]
-			x[i] = xi[start: end]
+			if hd.Sizes[i] == 0 { 
+				x[i] = []float32{ }
+				continue
+			}
+
+			xi16 := make([]uint16, hd.Sizes[i])
+			xf32 := make([]float32, hd.Sizes[i])
+			var min, max float32
+
+			err = binary.Read(f, order, &min)
+			if err != nil { panic(err.Error()) }
+			err = binary.Read(f, order, &max)
+			if err != nil { panic(err.Error()) }
+			err = binary.Read(f, order, xi16)
+			if err != nil { panic(err.Error()) }
+
+			Uint16ToFloat32(xi16, min, max, xf32)
+			x[i] = xf32
 		}
+
+		f.Close()
 	}
 
 	return x
