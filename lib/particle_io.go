@@ -367,10 +367,6 @@ func WriteFloat(
 			totalLen += len(x[j])
 		}
 
-
-		n0, _ := f.Seek(0, 1)
-		fmt.Println("->", n0)
-
 		f.Close()
 	}
 }

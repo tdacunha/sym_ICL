@@ -12,7 +12,6 @@ import (
 
 const (
 	NPeakMin = 300
-	MaxSnap = 235
 )
 
 type LookupTable struct {
@@ -70,18 +69,20 @@ func main() {
 		mFile, err := os.Create(lib.MergerFileName(cfg.BaseDir[i]))
 		if err != nil { panic(err.Error()) }
 
-		WriteHeader(MaxSnap, mIdx, mFile)
-		WriteFloat(files, b, n, mIdx, snaps, "Mvir", mFile)
+		maxSnap := cfg.MaxSnap[i]
+		
+		WriteHeader(maxSnap, mIdx, mFile)
+		WriteFloat(files, b, n, mIdx, snaps, maxSnap, "Mvir", mFile)
 		runtime.GC()
-		WriteFloat(files, b, n, mIdx, snaps, "Vmax", mFile)
+		WriteFloat(files, b, n, mIdx, snaps, maxSnap, "Vmax", mFile)
 		runtime.GC()
-		WriteFloat(files, b, n, mIdx, snaps, "RVmax", mFile)
+		WriteFloat(files, b, n, mIdx, snaps, maxSnap, "RVmax", mFile)
 		runtime.GC()
-		WriteInt(files, b, n, mIdx, snaps, "ID", mFile)
+		WriteInt(files, b, n, mIdx, snaps, maxSnap, "ID", mFile)
 		runtime.GC()
-		WriteVector(files, b, n, mIdx, snaps, "X", mFile)
+		WriteVector(files, b, n, mIdx, snaps, maxSnap, "X", mFile)
 		runtime.GC()
-		WriteVector(files, b, n, mIdx, snaps, "V", mFile)
+		WriteVector(files, b, n, mIdx, snaps, maxSnap, "V", mFile)
 		runtime.GC()
 
 		mFile.Close()		
@@ -99,14 +100,15 @@ func WriteHeader(snaps int32, mIdx []int32, out *os.File) {
 }
 
 func WriteFloat(files []*os.File, b *lib.Branches, n int, 
-	mIdx []int32, snaps [][]int32, varName string, out *os.File) {
+	mIdx []int32, snaps [][]int32, maxSnap int32,
+	varName string, out *os.File) {
 	
 	x := make([]float32, n)
 	lib.ReadTreeVarFullFloat(files, varName, x)
 
 	for k, i := range mIdx {
 		xi := x[b.Starts[i]: b.Ends[i]]
-		xFlat := make([]float32, MaxSnap+1)
+		xFlat := make([]float32, maxSnap+1)
 		for j := range xFlat { xFlat[j] = -1 }
 		for j := range xi {
 			xFlat[snaps[k][j]] = xi[j]
@@ -116,14 +118,15 @@ func WriteFloat(files []*os.File, b *lib.Branches, n int,
 }
 
 func WriteInt(files []*os.File, b *lib.Branches, n int, 
-	mIdx []int32, snaps [][]int32, varName string, out *os.File) {
+	mIdx []int32, snaps [][]int32, maxSnap int32,
+	varName string, out *os.File) {
 
 	x := make([]int32, n)
 	lib.ReadTreeVarFullInt(files, varName, x)
 
 	for k, i := range mIdx {
 		xi := x[b.Starts[i]: b.Ends[i]]
-		xFlat := make([]int32, MaxSnap+1)
+		xFlat := make([]int32, maxSnap+1)
 		for j := range xFlat { xFlat[j] = -1 }
 		for j := range xi {
 			xFlat[snaps[k][j]] = xi[j]
@@ -133,14 +136,15 @@ func WriteInt(files []*os.File, b *lib.Branches, n int,
 }
 
 func WriteVector(files []*os.File, b *lib.Branches, n int, 
-	mIdx []int32, snaps [][]int32, varName string, out *os.File) {
+	mIdx []int32, snaps [][]int32, maxSnap int32,
+	varName string, out *os.File) {
 	x := make([][3]float32, n)
 	lib.ReadTreeVarFullVector(files, varName, x)
 
 	for k, i := range mIdx {
 		xi := x[b.Starts[i]: b.Ends[i]]
 		
-		xFlat := make([][3]float32, MaxSnap+1)
+		xFlat := make([][3]float32, maxSnap+1)
 		for j := range xFlat { xFlat[j] = [3]float32{ -1, -1, -1 } }
 		for j := range xi {
 			xFlat[snaps[k][j]] = xi[j]

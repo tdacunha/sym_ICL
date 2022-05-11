@@ -9,13 +9,14 @@ import (
 
 // Config contains all the fields inside a particle-tracking config file.
 type Config struct {
-	MatchID, MatchSnap []int32
+	MatchID, MaxSnap []int32
 	Eps, Mp []float64
 	Blocks []int
 	// Input directories.
 	SnapFormat, TreeDir []string
 	// The directory where all the library's files are stored
 	BaseDir []string
+	TreeStyle []string
 }
 
 // ParseConfig parses a six-column particle-tracking config file. The contents
@@ -42,9 +43,9 @@ func ParseConfig(fname string) *Config {
 			}
 		}
 		
-		if len(cols) != 8 {
+		if len(cols) != 9 {
 			panic(fmt.Sprintf("Line %d of %s is '%s', but you need there " +
-				"to be eight columns.", i+1, fname, line))
+				"to be nine columns.", i+1, fname, line))
 		}
 
 		matchID, err := strconv.Atoi(cols[0])
@@ -55,12 +56,12 @@ func ParseConfig(fname string) *Config {
 		cfg.MatchID = append(cfg.MatchID, int32(matchID))
 
 
-		matchSnap, err := strconv.Atoi(cols[1])
+		maxSnap, err := strconv.Atoi(cols[1])
 		if err != nil {
 			panic(fmt.Sprintf("Could not parse snapshot on line %d of " +
 				"%s: %s", i+1, fname, cols[1]))
 		}
-		cfg.MatchSnap = append(cfg.MatchSnap, int32(matchSnap))
+		cfg.MaxSnap = append(cfg.MaxSnap, int32(maxSnap))
 		
 		eps, err := strconv.ParseFloat(cols[2], 64)
 		if err != nil {
@@ -86,6 +87,15 @@ func ParseConfig(fname string) *Config {
 		cfg.SnapFormat = append(cfg.SnapFormat, cols[5])
 		cfg.TreeDir = append(cfg.TreeDir, cols[6])
 		cfg.BaseDir = append(cfg.BaseDir, cols[7])
+		
+		treeStyle := cols[8]
+		switch treeStyle {
+		case "ct_rvmax", "ct_rhapsody":
+		default:
+			panic(fmt.Sprintf("The tree style '%s' is not recognized.",
+				treeStyle))
+		}
+		cfg.TreeStyle = append(cfg.TreeStyle, treeStyle)
 	}
 	
 	return cfg

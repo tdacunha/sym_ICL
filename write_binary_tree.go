@@ -84,7 +84,7 @@ func main() {
 		lib.MemoryUsage()
 		
 		lib.MaybeMkdir(lib.HaloDirName(cfg.BaseDir[i]))
-		ConvertTree(cfg.TreeDir[i], cfg.BaseDir[i])
+		ConvertTree(cfg.TreeDir[i], cfg.BaseDir[i], cfg, i)
 	}
 
 	log.Println("Finishing write_binary_tree")
@@ -136,12 +136,12 @@ func CountHeaderLines(fileName string) (nLines, nTrees int) {
 	return nLines, nTrees
 }
 
-func ConvertTree(treeDir, outDir string) {
+func ConvertTree(treeDir, outDir string, cfg *lib.Config, cfgi int) {
 	files := TreeFileNames(treeDir)
 	binFiles := BinFileNames(outDir, files)
 	for i := range files {
 		runtime.GC()
-		ConvertTreeFile(files[i], binFiles[i])
+		ConvertTreeFile(files[i], binFiles[i], cfg, cfgi)
 	}
 }
 
@@ -171,16 +171,21 @@ func BinFileNames(outDir string, treeFileNames []string) []string {
 	return out
 }
 
-func ConvertTreeFile(treeName, outName string) {
-	cfg := catio.DefaultConfig
+func ConvertTreeFile(treeName, outName string, cfg *lib.Config, cfgi int) {
+	catioCfg := catio.DefaultConfig
 
 	var nTrees int
-	if cfg.SkipLines, nTrees = CountHeaderLines(treeName); nTrees == 0 {
+	if catioCfg.SkipLines, nTrees = CountHeaderLines(treeName); nTrees == 0 {
 		return
 	}
 
+	if cfg.TreeStyle[cfgi] != "ct_rvmax" {
+		panic(fmt.Sprintf("Cannot parse tree files with style '%s'",
+			cfg.TreeStyle[cfgi]))
+	}
+
 	log.Printf("Parsing %s", treeName)
-	rd := catio.TextFile(treeName, cfg)
+	rd := catio.TextFile(treeName, catioCfg)
 
 	f, err := os.Create(outName)
 	if err != nil { panic(err.Error()) }

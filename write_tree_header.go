@@ -11,9 +11,6 @@ import (
 	"github.com/phil-mansfield/lmc_ges_tracking/lib"
 )
 
-var (
-	MaxSnap = int32(235)
-)
 
 // HaloTrack contains the evolution history of a single halo.
 func main() {	
@@ -39,7 +36,7 @@ func main() {
 		log.Println("Creating lookup table")
 		h.IDTable = NewLookupTable(h.ID)
 		log.Println("Creating tracks")
-		t := CalcTracks(h, cfg.MatchID[i], cfg.MatchSnap[i])
+		t := CalcTracks(h, cfg.MatchID[i], cfg.MaxSnap[i])
 		log.Println("Writing tracks")
 		WriteTracks(cfg.BaseDir[i], t)
 		MemoryLog()
@@ -138,19 +135,14 @@ func WriteTracks(dir string, t *Tracks) {
 	err = binary.Write(f, lib.ByteOrder, t.PreprocessSnap)
 }
 
-func CalcTracks(h *Haloes, centralID int32, centralSnap int32) *Tracks {
-	if centralSnap != 235 {
-		panic("Matching off a central halo at a snapshot other " + 
-			"than 235 isn't supported right now.")
-	}
-
+func CalcTracks(h *Haloes, centralID int32, maxSnap int32) *Tracks {
 	t := &Tracks{ }
 
 	t.Starts, t.Ends = StartsEnds(h)
 	t.N = len(t.Starts)
 	t.MWIdx = FindCentral(h, t, centralID)
 	t.IsReal = IsReal(h, t)
-	t.IsDisappear = IsDisappear(h, t)
+	t.IsDisappear = IsDisappear(h, t, maxSnap)
 	t.IsCentralSub = IsCentralSub(h, t)
 	t.HostIdx, t.HostSnap = FindAllHosts(h, t)	
 	t.TrackIdx = FindTrackIndices(h, t)
@@ -203,12 +195,12 @@ func IsReal(h *Haloes, t *Tracks) []bool {
 	return isReal
 }
 
-func IsDisappear(h *Haloes, t *Tracks) []bool {
+func IsDisappear(h *Haloes, t *Tracks, maxSnap int32) []bool {
 	out := make([]bool, t.N)
 	
 	for i := range out {
 		out[i] = h.DescID[t.Starts[i]] == -1 &&
-			h.Snap[t.Starts[i]] != MaxSnap
+			h.Snap[t.Starts[i]] != maxSnap
 	}
 
 	return out

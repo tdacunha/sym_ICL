@@ -28,9 +28,14 @@ tree_dir = "/sdf/group/kipac/u/ollienad/Group_zoomins/%s/output_new/rockstar/tre
 # for the halo name with a single %.
 data_product_dir = "/sdf/group/kipac/g/cosmo/ki21/phil1/simulations/ZoomIns/Group/%s/"
 
-fmt_string = "%%d %%d %s %s %d %s %s %s" % (eps, mp, num_snapshot_files, 
-                                            snapshot_format, tree_dir,
-                                            data_product_dir)
+# A string describing the style of the tree files. Currently supported are 
+# "ct_rvmax", the forked version of consistent trees used by most of the
+# Symphony suite, and "ct_rhapsody", the version used by rhapsody.
+tree_style = "ct_rvmax"
+
+fmt_string = "%%d %%d %s %s %d %s %s %s %s" % (eps, mp, num_snapshot_files, 
+                                               snapshot_format, tree_dir,
+                                               data_product_dir, tree_style)
 
 for i in range(len(haloes)):
     h = haloes[i]
