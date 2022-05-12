@@ -14,6 +14,13 @@ du -h /oak/stanford/orgs/kipac/users/ycwang19/ZEUS/MWmass_new/Halo*/output/rocks
 head -n 1 /oak/stanford/orgs/kipac/users/ycwang19/ZEUS/MWmass_new/Halo*/output/rockstar/trees/tree_0_0_0.dat > MW_mass/tree_headers.txt
 ```
 
+Note that if you have very complicated, non uniform directory structure, you can
+pipe arguments out of config files and around with awk and xargs like this:
+
+```
+cat config.txt | awk '{print $7}' | xargs ls > tree_locations.txt
+```
+
 This will create three files that you can browse to diagnose problems. Look through `tree_locations.txt` and see if there are any simulations which don't have tree files yet: these would be jobs that haven't finished running. Look through `tree_sizes.txt` to get a sense for which simulations are going to be time intensive, and check that none of the tree files are suspisciously small. Look through `tree_headers.txt` and confirm that all your simulations used the same version of Rockstar/consistent-trees. 
 
 The code currently asusmes that your header looks like this:
