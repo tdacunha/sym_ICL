@@ -9,22 +9,23 @@ func TestParseConfig(t *testing.T) {
 	cfg := ParseConfig(cfgName)
 
 	matchID:= []int32{ 9, 8 }
-	matchSnap := []int32{ 99, 88 }
+	maxSnap := []int32{ 99, 88 }
 	eps := []float64{ 1.0, 3.5 }
 	mp := []float64{ 2.0, 5.5 }
 	blocks := []int{ 10, 100 }
 	snapFmt := []string{"a", "aa"}
 	treeDir := []string{"b", "bb"}
 	baseDir := []string{"c", "cc"}
+	treeStyle := []string{"ct_rvmax", "ct_rhapsody"}
 	
 	if !Int32Eq(matchID, cfg.MatchID) {
 		t.Errorf("Expected MatchID = %d, got %d",
 			matchID, cfg.MatchID)
 	}
 
-	if !Int32Eq(matchSnap, cfg.MatchSnap) {
-		t.Errorf("Expected MatchSnap = %d, got %d",
-			matchSnap, cfg.MatchSnap)
+	if !Int32Eq(maxSnap, cfg.MaxSnap) {
+		t.Errorf("Expected MaxSnap = %d, got %d",
+			maxSnap, cfg.MaxSnap)
 	}
 	
 	if !Float64Eq(mp, cfg.Mp) {
@@ -55,6 +56,11 @@ func TestParseConfig(t *testing.T) {
 	if !StringEq(baseDir, cfg.BaseDir) {
 		t.Errorf("Expected BaseDir = %s, got %s",
 			baseDir, cfg.BaseDir)
+	}
+
+	if !StringEq(treeStyle, cfg.TreeStyle) {
+		t.Errorf("Expected TreeStyle = %s, got %s",
+			treeStyle, cfg.TreeStyle)
 	}
 }
 

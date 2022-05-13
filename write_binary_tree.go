@@ -28,6 +28,8 @@ var (
 	// X(3), V(3), J(3), A(3)
 	VectorCols = []int{17, 18, 19, 20, 21, 22, 23, 24, 25, 48, 49, 50 }
 
+	BlankCol = 2
+
 	OldTreeMap = map[int]int{
 		28: 28,
 		1: 1,
@@ -47,7 +49,7 @@ var (
 		46: 43,
 		47: 44,
 		56: 53,
-		60: 57, // Should never happen
+		60: 16, // Should never happen
 		17: 17,
 		18: 18,
 		19: 19,
@@ -84,7 +86,7 @@ func main() {
 		lib.MemoryUsage()
 		
 		lib.MaybeMkdir(lib.HaloDirName(cfg.BaseDir[i]))
-		ConvertTree(cfg.TreeDir[i], cfg.BaseDir[i])
+		ConvertTree(cfg.TreeDir[i], cfg.BaseDir[i], cfg, i)
 	}
 
 	log.Println("Finishing write_binary_tree")
@@ -136,12 +138,12 @@ func CountHeaderLines(fileName string) (nLines, nTrees int) {
 	return nLines, nTrees
 }
 
-func ConvertTree(treeDir, outDir string) {
+func ConvertTree(treeDir, outDir string, cfg *lib.Config, cfgi int) {
 	files := TreeFileNames(treeDir)
 	binFiles := BinFileNames(outDir, files)
 	for i := range files {
 		runtime.GC()
-		ConvertTreeFile(files[i], binFiles[i])
+		ConvertTreeFile(files[i], binFiles[i], cfg, cfgi)
 	}
 }
 
@@ -171,30 +173,37 @@ func BinFileNames(outDir string, treeFileNames []string) []string {
 	return out
 }
 
-func ConvertTreeFile(treeName, outName string) {
-	cfg := catio.DefaultConfig
+func ConvertTreeFile(treeName, outName string, cfg *lib.Config, cfgi int) {
+	catioCfg := catio.DefaultConfig
 
 	var nTrees int
-	if cfg.SkipLines, nTrees = CountHeaderLines(treeName); nTrees == 0 {
+	if catioCfg.SkipLines, nTrees = CountHeaderLines(treeName); nTrees == 0 {
 		return
 	}
 
+	switch cfg.TreeStyle[cfgi] {
+	case "ct_rvmax", "ct_rhapsody":
+	default:
+		panic(fmt.Sprintf("Cannot parse tree files with style '%s'",
+			cfg.TreeStyle[cfgi]))
+	}
+
 	log.Printf("Parsing %s", treeName)
-	rd := catio.TextFile(treeName, cfg)
+	rd := catio.TextFile(treeName, catioCfg)
 
 	f, err := os.Create(outName)
 	if err != nil { panic(err.Error()) }
 	defer f.Close()
 	
-	order := ConvertInts(rd, f)
+	order := ConvertInts(rd, f, cfg.TreeStyle[cfgi])
 	runtime.GC()
-	ConvertFloats(rd, f, order)
+	ConvertFloats(rd, f, cfg.TreeStyle[cfgi], order)
 	runtime.GC()
-	ConvertVectors(rd, f, order)
+	ConvertVectors(rd, f, cfg.TreeStyle[cfgi], order)
 	runtime.GC()
 }
 
-func ConvertInts(rd catio.Reader, f *os.File) []int32 {
+func ConvertInts(rd catio.Reader, f *os.File, treeStyle string) []int32 {
 	// Read the columns
 	colIdxs := []int{ DFIDCol }
 	colIdxs = append(colIdxs, IntCols...)
@@ -243,14 +252,27 @@ func CreateTreeHeader(n int) *lib.TreeHeader {
 	}
 }
 
-func ConvertFloats(rd catio.Reader, f *os.File, order []int32) {
+func ConvertFloats(rd catio.Reader, f *os.File, treeStyle string, order []int32) {
 	colIdxs := make([]int, len(FloatCols))
 	if OldTreeVersion {
 		for i := range colIdxs { colIdxs[i] = OldTreeMap[FloatCols[i]] }
 	} else {
 		for i := range colIdxs { colIdxs[i] = FloatCols[i] }
 	}
+
+	if treeStyle == "ct_rhapsody" {
+		for i := range colIdxs {
+			if colIdxs[i] == 60 { colIdxs[i] = BlankCol }
+		}
+	}
+
 	cols := rd.ReadFloat32s(colIdxs)
+
+	for i := range cols {
+		if colIdxs[i] == BlankCol {
+			for j := range cols[i] { cols[i][j] = -1 }
+		}
+	}
 
 	buf := make([]float32, len(cols[0]))
 	for i := range cols {
@@ -260,7 +282,7 @@ func ConvertFloats(rd catio.Reader, f *os.File, order []int32) {
 	}
 }
 
-func ConvertVectors(rd catio.Reader, f *os.File, order []int32) {
+func ConvertVectors(rd catio.Reader, f *os.File, treeStyle string, order []int32) {
 	colIdxs := make([]int, len(VectorCols))
 	if OldTreeVersion {
 		for i := range colIdxs { colIdxs[i] = OldTreeMap[VectorCols[i]] }
