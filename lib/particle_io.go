@@ -243,19 +243,14 @@ func MaybeMkdir(name string) {
 // WriteVector splits a vector array across files in the same way that WriteTags
 // splits tags across files.
 func WriteVector(
-	baseDir string, nFiles int, varName string, snap int, x [][][3]float32,
+	hd *ParticleHeader, baseDir, varName string, snap int, x [][][3]float32,
 ) {
 	MaybeMkdir(SnapDirName(baseDir, snap))
 
 	order := binary.LittleEndian
-
-	nTot := 0
-	for i := range x { nTot += len(x[i]) }
-	nPerFile := int(math.Ceil(float64(nTot)/float64(nFiles)))
 	
-	j := 0 // Indexes over haloes
 	totalLen := 0 // Total number of particles
-	for iFile := 0; iFile < nFiles; iFile++ {
+	for iFile := 0; iFile < int(hd.NFile); iFile++ {
 		// Create files
 		f, err := os.Create(VarFileName(baseDir, varName, snap, iFile))
 		if err != nil { panic(err.Error()) }
@@ -263,8 +258,8 @@ func WriteVector(
 		err = binary.Write(f, order, int32(VectorVarCode))
 		if err != nil { panic(err.Error()) }
 		
-		for ; j < len(x) && totalLen < (iFile+1)*nPerFile; j++{
-			if len(x[j]) == 0 { continue }
+		for j := 0; j < int(hd.NHalo); j++ {
+			if int32(iFile) != hd.FileIdxs[j] || len(x[j]) == 0 { continue }
 
 			x16, min, max := Vector32ToUint16(x[j])
 
@@ -285,11 +280,11 @@ func WriteVector(
 }
 
 // ReadVector reads the floats associated with a given halo.
-func ReadVector(baseDir, varName string,
-	snap int, hd *ParticleHeader) [][][3]float32 {
+func ReadVector(
+	hd *ParticleHeader, baseDir, varName string, snap int,
+) [][][3]float32 {
 	
 	order := binary.LittleEndian
-	i := 0 // indexes over all haloes
 
 	x := make([][][3]float32, hd.NHalo)
 	
@@ -301,14 +296,14 @@ func ReadVector(baseDir, varName string,
 		err = binary.Read(f, order, &code)
 		if code != VectorVarCode {
 			panic(fmt.Sprintf("%s is not vector variable file.",
-				VarFileName(baseDir, varName, snap, i)))
+				VarFileName(baseDir, varName, snap, iFile)))
 		}
 
-		for ; i < len(hd.FileIdxs) &&  hd.FileIdxs[i] == int32(iFile); i++ {
-			if hd.Sizes[i] == 0 { 
-				x[i] = [][3]float32{ }
+		for j := 0; j < int(hd.NHalo); j++ {
+			if int32(iFile) != hd.FileIdxs[j] {
 				continue
 			}
+			panic("Conditioning in loop not updated")
 
 			var size int64
 			err = binary.Read(f, order, &size)
@@ -326,7 +321,7 @@ func ReadVector(baseDir, varName string,
 			if err != nil { panic(err.Error()) }
 
 			Uint16ToVector32(xi16, min, max, xf32)
-			x[i] = xf32
+			x[j] = xf32
 		}
 				
 		f.Close()
@@ -338,29 +333,26 @@ func ReadVector(baseDir, varName string,
 // WriteFloat splits a float32 array across files in the same way that WriteTags
 // splits tags across files.
 func WriteFloat(
-	baseDir string, nFiles int, varName string, snap int, x [][]float32,
+	hd *ParticleHeader, baseDir, varName string, snap int, x [][]float32,
 ) {
 	MaybeMkdir(SnapDirName(baseDir, snap))
 
 	order := binary.LittleEndian
 
-	nTot := 0
-	for i := range x { nTot += len(x[i]) }
-	nPerFile := int(math.Ceil(float64(nTot)/float64(nFiles)))
-	
-	j := 0 // Indexes over haloes
 	totalLen := 0 // Total number of particles
-	for iFile := 0; iFile < nFiles; iFile++ {
+	for iFile := 0; iFile < int(hd.NFile); iFile++ {
 		// Create files
 		f, err := os.Create(VarFileName(baseDir, varName, snap, iFile))
 		if err != nil { panic(err.Error()) }
 		
 		err = binary.Write(f, order, int32(FloatVarCode))
 		if err != nil { panic(err.Error()) }
-		
-		for ; j < len(x) && totalLen < (iFile+1)*nPerFile; j++{
-			if len(x[j]) == 0 { continue }
 
+		for j := 0; j < int(hd.NHalo); j++ {
+			if int32(iFile) != hd.FileIdxs[j] || len(x[j]) == 0 {
+				continue
+			} 
+			
 			x16, min, max := Float32ToUint16(x[j])
 
 			err = binary.Write(f, order, int64(len(x[j])))
@@ -456,11 +448,11 @@ func Uint16ToVector32(x []uint16, min, max [3]float32, out [][3]float32) {
 }
 
 // ReadFloat reads the floats associated with a given halo.
-func ReadFloat(baseDir string, varName string,
-	snap int, hd *ParticleHeader) [][]float32 {
+func ReadFloat(
+	hd * ParticleHeader, baseDir, varName string, snap int,
+) [][]float32 {
 	
 	order := binary.LittleEndian
-	i := 0 // indexes over all haloes
 
 	x := make([][]float32, hd.NHalo)
 	
@@ -475,9 +467,11 @@ func ReadFloat(baseDir string, varName string,
 				VarFileName(baseDir, varName, snap, iFile)))
 		}
 
-		for ; i < len(hd.FileIdxs) &&  hd.FileIdxs[i] == int32(iFile); i++ {
-			if hd.Sizes[i] == 0 { 
-				x[i] = []float32{ }
+		for j := 0; j < int(hd.NHalo); j++ {
+			if int32(iFile) != hd.FileIdxs[j] {
+				continue
+			} else if hd.N0[j] == 0 { 
+				x[j] = []float32{ }
 				continue
 			}
 
@@ -497,7 +491,7 @@ func ReadFloat(baseDir string, varName string,
 			if err != nil { panic(err.Error()) }
 
 			Uint16ToFloat32(xi16, min, max, xf32)
-			x[i] = xf32
+			x[j] = xf32
 		}
 
 		f.Close()

@@ -289,16 +289,16 @@ type TagLookup struct {
 }
 
 func NewTagLookup(np int) *TagLookup {
-	return &TagLookup{
-		Halo: make([]int16, np),
-		Index: make([]int32, np),
+	halo, index := make([]int16, np), make([]int32, np)
+	for i := range halo {
+		halo[i], index[i] = -1, -1
 	}
+	return &TagLookup{ Halo: halo, Index: index }
 }
-
 
 func (l *TagLookup) AddTags(tags *Tags) {
 	for iHalo := range tags.ID {
-		for i := range tags.ID[iHalo] {
+		for i := 0; i < int(tags.N0[iHalo]); i++ {
 			idIdx := tags.ID[iHalo][i] - 1
 			l.Halo[idIdx] = int16(iHalo)
 			l.Index[idIdx] = int32(i)

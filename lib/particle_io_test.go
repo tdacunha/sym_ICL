@@ -6,27 +6,27 @@ import (
 
 func TestReadTags(t *testing.T) {
 	tags := &Tags{
-		N0: []int32{ 1, 1, 0, 3, 0 },
+		N0: []int32{ 2, 1, 0, 5, 1 },
 		ID: [][]int32{
-			{1, 2},
-			{3},
-			{ },
+			{1, 2, 100, 101},
+			{3, 102, 103},
+			{104},
 			{4, 5, 6, 7, 8},
-			{9},
+			{9, 105, 106},
 		},
 		Snap: [][]int16{
-			{0, 1},
-			{0},
-			{ },
+			{0, 1, 100, 101},
+			{0, 102, 103},
+			{104},
 			{0, 1, 2, 3, 4},
-			{0},
+			{0, 105, 106},
 		},
 		Flag: [][]uint8{
-			{0, 0},
+			{0, 0, 1, 1},
+			{0, 1, 1},
 			{1},
-			{ },
-			{2, 2, 2, 2, 2},
-			{3},
+			{0, 0, 0, 0, 0},
+			{0, 1, 1},
 		},
 	}
 
@@ -69,9 +69,10 @@ func TestReadFloat(t *testing.T) {
 		{9.0},
 	}
 
-	WriteFloat("test_dir", 3, "test_float", snap, x)
 	hd := ReadParticleHeader("test_dir")
-	rx:= ReadFloat("test_dir", "test_float", snap, hd)
+
+	WriteFloat(hd, "test_dir", "test_float", snap, x)
+	rx:= ReadFloat(hd, "test_dir", "test_float", snap)
 
 	if !Float32Eq2D(x, rx, 1e-3) {
 		t.Errorf("Wrote floats %v, but read floats %v", x, rx)
@@ -89,9 +90,9 @@ func TestReadVector(t *testing.T) {
 		[][3]float32{{9,9,9}},
 	}
 
-	WriteVector("test_dir", 3, "test_vector", snap, x)
 	hd := ReadParticleHeader("test_dir")
-	rx:= ReadVector("test_dir", "test_vector", snap, hd)
+	WriteVector(hd, "test_dir", "test_vector", snap, x)
+	rx:= ReadVector(hd, "test_dir", "test_vector", snap)
 
 	if !Vec32Eq2D(x, rx, 1e-3) {
 		t.Errorf("Wrote vectors %v, but read vectors %v", x, rx)

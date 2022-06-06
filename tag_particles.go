@@ -13,7 +13,7 @@ import (
 var (
 	// What level in the file are the HR particles stored at?
 	HRLevel = 1
-	NFiles = 8
+	NFiles = 1
 )
 
 func main() {
@@ -88,23 +88,41 @@ func TagHalo(cfg *lib.Config, cfgi int) {
 			t2 := time.Now()
 			lib.InsertOwnersInLists(workers, snap, idxList, snapList, mpeak)
 			t3 := time.Now()
-			tags.AddChangedParticles(idxList, snapList, snap)
-			t4 := time.Now()
-
 			dt1 += t1.Sub(t0)
 			dt2 += t2.Sub(t1)
 			dt3 += t3.Sub(t2)
-			dt4 += t4.Sub(t3)
 		}
+		t4 := time.Now()
+		tags.AddChangedParticles(idxList, snapList, snap)
+		t5 := time.Now()
+		
+		dt4 += t5.Sub(t4)
 		runtime.GC()
 	}
 
-	lib.OrderTags(tags)
+	tags.OrderTags()
+
 	lookup := lib.NewTagLookup(header.NTot[HRLevel])
 	lookup.AddTags(tags)
-	lib.WriteTags(baseDir, NFiles, tags, lookup)
+	
+	n0, nAll, nExp, nHuge := 0, 0, 0, 0
+	for i := range lookup.Halo {
+		if lookup.Halo[i] != -1  {
+			nAll++
+			if lookup.Halo[i] == 0 {
+				n0++
+			}
+		}
+	}
+	for i := range tags.N0 {
+		nExp += int(tags.N0[i])
+		nHuge += len(tags.ID[i])
+	}
 
-	EstimateSpaceSavings(tags)
+	fmt.Println("N0 tags.N0, len(tags.ID) | nAll nExp | nHuge")
+	fmt.Println(n0, tags.N0[0], len(tags.ID[0]), "|", nAll, nExp, "|", nHuge)
+	fmt.Printf("%.3g\n", 4.0e5 * float64(n0))
+	lib.WriteTags(baseDir, NFiles, tags, lookup)
 }
 
 func ExtractHaloes(m *lib.Mergers, snap int) (hx [][3]float32, hr []float32) {
@@ -152,22 +170,4 @@ func CalcMpeak(m *lib.Mergers) []float32 {
 		mpeak[i] = lib.Mpeak(m.Mvir[i])
 	}
 	return mpeak
-}
-
-func EstimateSpaceSavings(tags *lib.Tags) {
-	nTot, n0 := 0, 0
-	n0Infall := 0
-	for i := range tags.Snap {
-		nTot += len(tags.Snap[i])
-		n0 += int(tags.N0[i])
-		
-		for j := range tags.Snap[i] {
-			n0Infall += 236 - int(tags.Snap[i][j])
-		}
-	}
-
-	f0 := float64(n0) / float64(nTot)
-	fInfall := float64(n0Infall) / (236*float64(n0))
-	log.Printf("f0 = %.3f, fin = %.3f, ftot = %.3f",
-		f0, fInfall, 0.5*f0*fInfall)
 }
