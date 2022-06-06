@@ -18,8 +18,8 @@ def parse_sim_dir(sim_dir):
     base_dir, suite = path.split(suite_dir)
     return base_dir, suite, halo
 
-def write_cores(sim_dir, idxs):
-    file_name = path.join(sim_dir, "halos", "cores.dat")
+def write_infall_cores(sim_dir, idxs):
+    file_name = path.join(sim_dir, "halos", "infall_cores.dat")
 
     with open(file_name, "wb") as fp:
         fp.write(struct.pack("qq", idxs.shape[0], idxs.shape[1]))
@@ -91,10 +91,6 @@ def main():
                 else:
                     core_idxs[sub_i,:len(p_idx)] = p_idx
                     
-        write_cores(sim_dir, core_idxs)
-        print(core_idxs[1])
+        write_infall_cores(sim_dir, core_idxs)
         
-        core_idxs_rd = symlib.read_particles(info, sim_dir, 0, "core")
-        print(core_idxs_rd[1])
-
 if __name__ == "__main__": main()
