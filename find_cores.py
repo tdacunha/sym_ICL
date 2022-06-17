@@ -3,6 +3,9 @@ import symlib
 import find_infall_cores
 import scipy.spatial.distance as distance
 import struct
+import sys
+import scipy.special as special
+import os.path as path
 
 N_CORE_MAX = 32
 
@@ -40,7 +43,7 @@ def phase_space_density(x_core, v_core, x, v):
     # a KD tree is orders of magnitude slower than just doing it with brute
     # force.
     r = distance.cdist(z_core, z, "euclidean")
-    return rho_sph(r)
+    return rho_sph(r, 6)
     
 def write_cores(sim_dir, idxs):
     file_name = path.join(sim_dir, "halos", "cores.dat")
@@ -49,6 +52,7 @@ def write_cores(sim_dir, idxs):
         fp.write(struct.pack("qqq", idxs.shape[0],
                              idxs.shape[1], idxs.shape[2]))
         idxs = idxs.flatten()
+        idxs = np.asarray(idxs, dtype=np.int32)
         idxs.tofile(fp)
 
 def write_core_positions(sim_dir, x, v):
@@ -56,6 +60,8 @@ def write_core_positions(sim_dir, x, v):
     with open(file_name, "wb") as fp:
         fp.write(struct.pack("qq", x.shape[0], x.shape[1]))
         x, v = x.flatten(), v.flatten()
+        x = np.asarray(x, dtype=np.float32)
+        v = np.asarray(v, dtype=np.float32)
         x.tofile(fp)
         v.tofile(fp)
         
@@ -67,31 +73,35 @@ def core_velocity(idxs, v, scale):
 
 def track_cores_snap(info, sim_dir, snap, h, hist, infall_core_idxs,
                      core_idxs, core_x, core_v):
+    print("snap", snap)
+
     base_dir, suite, halo_name = find_infall_cores.parse_sim_dir(sim_dir)    
     param = symlib.parameter_table[suite]
     scale = symlib.scale_factors(sim_dir)
 
-    owner_all = symlib.read_particles(info, sim_dir, snap, "owner")
+    owner_all = symlib.read_particles(info, sim_dir, snap, "ownership")
     valid_all = symlib.read_particles(info, sim_dir, snap, "valid")
     x_all = symlib.read_particles(info, sim_dir, snap, "x")
     v_all = symlib.read_particles(info, sim_dir, snap, "v")
 
     for sub_i in range(1, len(h)):
-        if snap < hist["infall_snap"][sub_i]:
+        if snap < hist["merger_snap"][sub_i]:
             continue
-        elif snap == hist["infall_snap"][sub_i]:
+        elif snap == hist["merger_snap"][sub_i]:
             n_core = np.min(N_CORE_MAX)
+            x, v = x_all[sub_i], v_all[sub_i]
+
             idx = infall_core_idxs[sub_i,:n_core]
             core_idxs[sub_i,snap,:n_core] = idx
             core_x[sub_i,snap,:] = core_position(idx, x)
-            core_v[sub_i,snap,:] = core_velocity(idx, v)
+            core_v[sub_i,snap,:] = core_velocity(idx, v, scale[snap])
         else:
             owner, valid = owner_all[sub_i], valid_all[sub_i]
             x, v = x_all[sub_i], v_all[sub_i]
             
-            n_core = np.sum(core_idxs >= 0)
-            x_core = x[core_idxs[sub_i,snap,:n_core]]
-            v_core = v[core_idxs[sub_i,snap,:n_core]]
+            n_core = np.sum(core_idxs[sub_i,snap-1,:] >= 0)
+            x_core = x[core_idxs[sub_i,snap-1,:n_core]]
+            v_core = v[core_idxs[sub_i,snap-1,:n_core]]
 
             ok = valid & (owner == 0)
             
@@ -99,18 +109,17 @@ def track_cores_snap(info, sim_dir, snap, h, hist, infall_core_idxs,
             rho = phase_space_density(x_core, v_core, x[ok], v[ok])
             
             top_n_idx = np.argpartition(rho, -n_core)[-n_core:]
-            top_n_rho = rho_phase[top_n_idx]
+            top_n_rho = rho[top_n_idx]
             top_n_order = np.argsort(top_n_rho)[::-1]
-            idx = top_n_idx[top_n_order]
-            
+            idx = idx[top_n_idx[top_n_order]]
+
             core_idxs[sub_i,snap,:n_core] = idx
             core_x[sub_i,snap,:] = core_position(idx, x)
-            core_v[sub_i,snap,:] = core_velocity(idx, v)
+            core_v[sub_i,snap,:] = core_velocity(idx, v, scale[snap])
 
             
-            
 def track_cores(sim_dir):
-    base_dir, suite, halo_name = find_infall_cores..parse_sim_dir(sim_dir)
+    base_dir, suite, halo_name = find_infall_cores.parse_sim_dir(sim_dir)
     
     param = symlib.parameter_table[suite]
     scale = symlib.scale_factors(sim_dir)
@@ -124,8 +133,8 @@ def track_cores(sim_dir):
     core_x = np.zeros((len(h), n_snap, 3))
     core_v = np.zeros((len(h), n_snap, 3))
     
-    infall_core_idxs = symlib.read_particles(info, sim_dir, snap, "infall_core")
-    for snap in range(n_snap):
+    infall_core_idxs = symlib.read_particles(info, sim_dir, 0, "infall_core")
+    for snap in range(np.min(hist["merger_snap"][1:]), n_snap):
         track_cores_snap(info, sim_dir, snap, h, hist, infall_core_idxs,
                          core_idxs, core_x, core_v)
         
@@ -145,4 +154,4 @@ def main():
 
         track_cores(sim_dir)
 
-if __name__ == "__main__": pass
+if __name__ == "__main__": main()
