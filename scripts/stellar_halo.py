@@ -76,7 +76,7 @@ def density_profile(sim_dir, r_bins, r, mp_star, in_halo, include_sub,
         target_subs = np.arange(1, len(h))
 
     r_host = h["rvir"][0,-1]
-    r_bins = r_bins*r_host # Locally', we'll convert out fo normalized units
+    r_bins = r_bins*r_host # Locally, we'll convert out fo normalized units
     V_bins = (r_bins[1:]**3 - r_bins[:-1]**3)*4*np.pi/3
 
     n_bins = len(r_bins) - 1
@@ -99,16 +99,17 @@ def main():
     n_hosts = symlib.n_hosts(suite)
 
     # Set up density profiles
-    n_bins = 30
+    n_bins = 50
     r_bins = np.logspace(-2, 0, n_bins + 1) # In units of Rvir(z=0)
-    rho_high_mass = np.zeros(n_bins)
-    rho_low_mass = np.zeros(n_bins)
+    rho_high_mass = []
+    rho_low_mass = [] 
 
     # Our galaxy-halo model
     gal_halo = symlib.GalaxyHaloModel(
         symlib.UniverseMachineMStar(),
         symlib.Jiang2019RHalf(),
-        symlib.PlummerProfile()
+        symlib.PlummerProfile(),
+        no_scatter=True
     )
 
     # Arrays needed to store plot data
@@ -155,17 +156,17 @@ def main():
             mpeak_sub.append(hist["mpeak"][j])
 
         # Compute density profiles, add to running averages.
-        rho_high_mass += density_profile(
+        rho_high_mass.append(density_profile(
             sim_dir, r_bins, rf, mp_star, in_halo, is_high_mass,
-            target_subs=target_subs)
-        rho_low_mass += density_profile(
+            target_subs=target_subs))
+        rho_low_mass.append(density_profile(
             sim_dir, r_bins, rf, mp_star, in_halo, ~is_high_mass,
-            target_subs=target_subs)
-    
-        n_hosts_used += 1
-        # Uncomment this if you only want to look at one halo.
-        break
+            target_subs=target_subs))
 
+        print()
+
+        n_hosts_used += 1
+            
     m_star_halo = np.array(m_star_halo)
     m_star_gal = np.array(m_star_gal)
     mpeak_sub = np.array(mpeak_sub)
@@ -174,11 +175,18 @@ def main():
     fig, ax = plt.subplots()
     r_mid = np.sqrt(r_bins[1:]*r_bins[:-1])
     
-    ax.plot(r_mid, rho_high_mass/n_hosts_used, c="tab:red",
+    med_rho_high_mass = np.median(rho_high_mass, axis=0)
+    med_rho_low_mass = np.median(rho_low_mass, axis=0)
+
+    for i in range(len(rho_high_mass)):
+        ax.plot(r_mid, rho_high_mass[i], lw=1, alpha=0.5, c="tab:red")
+        ax.plot(r_mid, rho_low_mass[i], lw=1, alpha=0.5, c="tab:blue")
+
+    ax.plot(r_mid, med_rho_high_mass, c="tab:red",
              label=r"$M_{\rm sub,infall}/M_{\rm host,infall} > 0.05$")
-    ax.plot(r_mid, rho_low_mass/n_hosts_used, c="tab:blue",
+    ax.plot(r_mid, med_rho_low_mass, c="tab:blue",
              label=r"$M_{\rm sub,infall}/M_{\rm host,infall} \leq 0.05$")
-    ax.plot(r_mid, (rho_high_mass + rho_low_mass)/n_hosts_used, c="k")
+    ax.plot(r_mid, med_rho_high_mass + med_rho_low_mass, c="k")
     ax.set_xlabel(r"$r\ ({\rm kpc})$")
     ax.set_ylabel(r"$\rho\ (M_\odot\,{\rm kpc}^{-3})$")
     ax.set_xscale("log")
@@ -191,6 +199,7 @@ def main():
     fig, ax = plt.subplots()
 
     order = np.argsort(mpeak_sub)
+    
     m_star_gal_sum = np.cumsum(m_star_gal[order])
     m_star_halo_sum = np.cumsum(m_star_halo[order])
 
