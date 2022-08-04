@@ -26,16 +26,6 @@ def final_radii(sim_dir, part_info, target_subs=None):
 
     last_snap = param["n_snap"] - 1
     
-    # Each of these returns a list of arrays, one for each subhalo.
-
-    # owner is 0 if the particle is owned by the subhalo and a positive
-    # integer otherwise.
-    owner = symlib.read_particles(part_info, sim_dir, last_snap, "ownership")
-    # True if the particle has been accreted onto the subhalo in the current
-    # snapshot and False otherwise.
-    valid = symlib.read_particles(part_info, sim_dir, last_snap, "valid")
-    x = symlib.read_particles(part_info, sim_dir, last_snap, "x")
-
     # The cut that determines whether a tracked core is still intact
     core_r = np.sqrt(np.sum(c["x"]**2, axis=2))
     mp = param["mp"]/param["h100"]
@@ -47,9 +37,12 @@ def final_radii(sim_dir, part_info, target_subs=None):
 
     for i in target_subs:
         # Only work with particles where this flag is true.
-        ok = (owner[i] == 0) & valid[i]
+        ok = symlib.read_particles(part_info, sim_dir, last_snap,
+                                   "valid", owner=i)
+        x = symlib.read_particles(part_info, sim_dir, last_snap, "x", owner=i)
+
         # Correct the units. There's an analogous function for velocities.
-        x_i = symlib.set_units_x(x[i], h_cmov[0,-1], scale[-1], param)
+        x_i = symlib.set_units_x(x, h_cmov[0,-1], scale[-1], param)
 
         r_host = np.sqrt(np.sum(x_i**2, axis=1))
         rf[i] = np.ones(len(ok))*-1
@@ -137,8 +130,8 @@ def main():
         target_subs = np.arange(1, len(h))
 
         # mp_star is a list of arrays giving the stellar mass of each particle.
-        mp_star, _ = symlib.tag_stars(sim_dir, gal_halo, 
-                                      target_subs=target_subs)
+        mp_star, _, r_half, m_star = symlib.tag_stars(
+            sim_dir, gal_halo, target_subs=target_subs)
 
         # Example analysis function. rf and in_halo are both lists of arrays
         # rf gives the final radius of particles at z=0 relative to the host
@@ -147,7 +140,7 @@ def main():
         rf, in_halo = final_radii(sim_dir, part_info,
                                   target_subs=target_subs)
 
-        is_high_mass = hist["merger_ratio"] > 0.05
+        is_high_mass = hist["merger_ratio"] > 0.15
 
         # Keep track of contribution to total halo/satellite mass.
         for j in target_subs:
@@ -163,10 +156,8 @@ def main():
             sim_dir, r_bins, rf, mp_star, in_halo, ~is_high_mass,
             target_subs=target_subs))
 
-        print()
-
         n_hosts_used += 1
-            
+
     m_star_halo = np.array(m_star_halo)
     m_star_gal = np.array(m_star_gal)
     mpeak_sub = np.array(mpeak_sub)
@@ -183,9 +174,9 @@ def main():
         ax.plot(r_mid, rho_low_mass[i], lw=1, alpha=0.5, c="tab:blue")
 
     ax.plot(r_mid, med_rho_high_mass, c="tab:red",
-             label=r"$M_{\rm sub,infall}/M_{\rm host,infall} > 0.05$")
+             label=r"$M_{\rm sub,infall}/M_{\rm host,infall} > 0.15$")
     ax.plot(r_mid, med_rho_low_mass, c="tab:blue",
-             label=r"$M_{\rm sub,infall}/M_{\rm host,infall} \leq 0.05$")
+             label=r"$M_{\rm sub,infall}/M_{\rm host,infall} \leq 0.15$")
     ax.plot(r_mid, med_rho_high_mass + med_rho_low_mass, c="k")
     ax.set_xlabel(r"$r\ ({\rm kpc})$")
     ax.set_ylabel(r"$\rho\ (M_\odot\,{\rm kpc}^{-3})$")
