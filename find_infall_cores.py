@@ -1,10 +1,19 @@
-import sys
+import numpy as np
+import matplotlib.pyplot as plt
+import palette
+from palette import pc
+import subhalo_tracking as sh
 import os.path as path
 import symlib
-import numpy as np
+import matplotlib.colors as mpl_colors
+from colossus.cosmology import cosmology
+from colossus.halo import mass_so
+import subfind
+import os
+import sys
 import struct
 
-N_CORE_MAX = 100
+N_CORE = 32
 
 def get_sim_dirs(config_name):
     with open(config_name, "r") as fp: text = fp.read()
@@ -27,70 +36,51 @@ def write_infall_cores(sim_dir, idxs):
         idxs.tofile(fp)
 
 def main():
+    palette.configure(False)
+
     config_name, idx_str = sys.argv[1], sys.argv[2]
     target_idx = int(idx_str)
-
     sim_dirs = get_sim_dirs(config_name)
-    
+
     for host_i in range(len(sim_dirs)):
         if host_i != target_idx and target_idx != -1: continue
         sim_dir = sim_dirs[host_i]
         if sim_dir[-1] == "/": sim_dir = sim_dir[:-1]
+        
+        base_dir, suite_name, halo_name = parse_sim_dir(sim_dir)
+        print(suite_name, halo_name)
 
-        base_dir, suite, halo_name = parse_sim_dir(sim_dir)
-
-        param = symlib.parameter_table[suite]
-        scale = symlib.scale_factors(sim_dir)
-        n_snap = len(scale)
-
+        param = symlib.parameter_table[suite_name]
         h, hist = symlib.read_subhalos(param, sim_dir)
-
+        h_cmov = np.copy(h)
         info = symlib.ParticleInfo(sim_dir)
 
-        core_idxs = np.ones((len(h), N_CORE_MAX), dtype=np.int32) * -1
+        scale = symlib.scale_factors(sim_dir)
+        cosmo = cosmology.setCosmology("", symlib.colossus_parameters(param))
+        h = symlib.set_units_halos(h_cmov, scale, param)
+    
+        infall_cores = np.zeros((len(h), N_CORE), dtype=np.int32)
 
-        owner_all = symlib.read_particles(info, sim_dir, 0, "ownership")
+        for snap in range(len(scale)):
+            if snap not in hist["merger_snap"][1:]: continue
+            print("  snap %3d" % snap)
 
-        for snap in range(n_snap):
-            sub_idxs = np.where(snap == hist["merger_snap"])[0]
-            if len(sub_idxs) == 0: continue
-            if len(sub_idxs) == 1 and sub_idxs[0] == 0: continue
+            sd = sh.SnapshotData(info, sim_dir, snap, scale[snap], h_cmov,param)
+            prof = sh.MassProfile(sd.param, snap, h, sd.x, sd.owner, sd.valid)
+        
+            sub_idxs = np.where(hist["merger_snap"] == snap)[0]
 
-            x_all = symlib.read_particles(info, sim_dir, snap, "x")
-            v_all = symlib.read_particles(info, sim_dir, snap, "v")
+            for i_sub in sub_idxs:
+                if i_sub == 0: continue
+                print("   ", i_sub)
 
-            valid_all = symlib.read_particles(info, sim_dir, snap, "valid")
-            
-            for sub_i in sub_idxs:
-                if sub_i == 0: continue
-                print("snap: %d, sub: %d" % (snap, sub_i))
-                valid, owner = valid_all[sub_i], owner_all[sub_i]
-                x = x_all[sub_i][valid]
-                v = v_all[sub_i][valid]
-                p_idx = np.arange(len(x_all[sub_i]), dtype=np.int32)[valid]
+                infall_cores[i_sub] = sh.n_most_bound(
+                    h["x"][i_sub,snap], h["v"][i_sub,snap],
+                    sd.x[i_sub], sd.v[i_sub], sd.ok[i_sub],
+                    N_CORE, sd.param
+                )
 
-                v *= np.sqrt(scale[snap])
+        write_infall_cores(sim_dir, infall_cores)
 
-                dx, dv = np.zeros(x.shape), np.zeros(v.shape)
-                for dim in range(3):
-                    dx[:,dim] = x[:,dim] - h[sub_i,snap]["x"][dim]
-                    dv[:,dim] = v[:,dim] - h[sub_i,snap]["v"][dim]
-
-                dx *= scale[snap]/param["h100"]
-
-                rmax, vmax, PE, order = symlib.profile_info(param, x)
-                KE = np.sum(dv**2, axis=1)/2 / vmax**2
-                E = PE + KE
-
-                E, p_idx = E[owner[valid] == 0], p_idx[owner[valid] == 0]
-                order = np.argsort(E)
-                E, p_idx = E[order], p_idx[order]
-
-                if len(p_idx) > N_CORE_MAX:
-                    core_idxs[sub_i,:] = p_idx[:N_CORE_MAX]
-                else:
-                    core_idxs[sub_i,:len(p_idx)] = p_idx
-                    
-        write_infall_cores(sim_dir, core_idxs)
         
 if __name__ == "__main__": main()

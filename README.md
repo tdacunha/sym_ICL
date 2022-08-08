@@ -88,3 +88,14 @@ You may also want to change the number of files that particles are split across.
 By default, this number is 8. But you can increase it if this would lead to 
 particle files that are too large to comfortably hold in RAM at one time.
 
+Making data downloadable
+------------------------
+
+If you haven't already, you'll want to add your suite to list of objects that symlib can analyze. There are enough special cases that this has to be done manually, I'm afraid.
+- Add an entry to symlib.paramter_table corresponding to your suite. (symlib/lib.py)
+- Add your simulation to symlib.SUITE_NAMES (symlib/util.py)
+- Add an entry symlib.DEAFULT_HALO_NAMES (symlib/util.py)
+- Generate scale_factors.py. To do this, call go run scale_factor_table <suite name> <config file>. This reads in the scale factors of every snapshot of every halo, so you might not want to do this on a login node. Once you've done this for your suite, add a line to symlib/download_tables/generate_scale_factor_table.py
+s main function corresponding to your suite.
+
+(TODO: add packing and auto-generating instructions)

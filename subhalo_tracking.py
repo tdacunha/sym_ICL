@@ -78,6 +78,12 @@ class SnapshotData(object):
         self.v = symlib.read_particles(info, sim_dir, snap, "v")
         self.valid = symlib.read_particles(info, sim_dir, snap, "valid")
         self.owner = symlib.read_particles(info, sim_dir, snap, "ownership")
+        try:
+            self.infall_cores = symlib.read_particles(
+                info, sim_dir, snap, "infall_core")
+        except:
+            self.infall_cores = None
+
         self.ok = [None]*len(self.x)
         
         for i in range(len(self.x)):
@@ -85,7 +91,7 @@ class SnapshotData(object):
             self.v[i] = symlib.set_units_v(self.v[i], h_cmov[0,snap], a, param)
             self.ok[i] = self.valid[i] & (self.owner[i] == 0)
             
-        self.mp, self.eps = symlib.set_units_param(a, param)
+        self.mp, self.eps = symlib.set_units_parameters(a, param)
         self.snap = snap
         self.param = param
 

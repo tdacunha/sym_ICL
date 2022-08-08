@@ -14,14 +14,45 @@ import sys
 
 MIN_SNAP = 0
 
+def get_sim_dirs(config_name):
+    with open(config_name, "r") as fp: text = fp.read()
+    lines = [line for line in text.split("\n") if len(line) > 0]
+    for i in range(len(lines)):
+        lines[i] = [tok for tok in lines[i].split(" ") if len(tok) > 0]
+    return [line[7] for line in lines]
+
+def parse_sim_dir(sim_dir):
+    suite_dir, halo = path.split(sim_dir)
+    base_dir, suite = path.split(suite_dir)
+    print(sim_dir, base_dir, suite, halo)
+    return base_dir, suite, halo
+
+def get_matching_file_names(file_fmt):
+    file_names = []
+    while True:
+        file_name = file_fmt % len(file_names)
+        if not path.exists(file_name): return file_names
+        file_names.append(file_name)
+
 def main():
     palette.configure(False)
 
-    out_file = sys.argv[1] 
+    config_name, idx_str = sys.argv[1], sys.argv[2]
+    target_idx = int(idx_str)
+    sim_dirs = get_sim_dirs(config_name)
+
+    if target_idx == -1:
+        print("Must target a single halo.")
+        exit(1)
+
+    sim_dir = sim_dirs[target_idx]
+    if sim_dir[-1] == "/": sim_dir = sim_dir[:-1]
+
+    out_file_fmt = path.join(sim_dir, "halos", "core.%d.txt")
+    prev_file_names = get_matching_file_names(out_file_fmt)
+    out_file = out_file_fmt % len(prev_file_names)
     
-    base_dir = "/oak/stanford/orgs/kipac/users/phil1/simulations/ZoomIns"
-    suite_name = "SymphonyMilkyWay"
-    sim_dir = path.join(base_dir, suite_name, "Halo023")
+    base_dir, suite_name, halo_name = parse_sim_dir(sim_dir)
     
     param = symlib.parameter_table[suite_name]
     h, hist = symlib.read_subhalos(param, sim_dir)
@@ -66,16 +97,10 @@ def main():
             print("   ", i_sub)
 
             if tracks[i_sub] is None:
-                infall_cores[i_sub] = sh.n_most_bound(
-                    h["x"][i_sub,snap], h["v"][i_sub,snap],
-                    sd.x[i_sub], sd.v[i_sub], sd.ok[i_sub],
-                    n_core, sd.param
-                )
-
                 tracks[i_sub] = sh.SubhaloTrack(
-                    i_sub, sd, infall_cores[i_sub], param)
+                    i_sub, sd, sd.infall_cores[i_sub], param)
             else:
-                tracks[i_sub].next_snap(sd, infall_cores[i_sub])
+                tracks[i_sub].next_snap(sd, sd.infall_cores[i_sub])
                 
             xp, vp = sd.x[i_sub], sd.v[i_sub]
             mp = np.ones(len(xp))*sd.mp
