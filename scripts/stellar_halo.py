@@ -145,7 +145,7 @@ def main():
 
     # Our galaxy-halo model
     gal_halo = symlib.GalaxyHaloModel(
-        symlib.UniverseMachineMStar(),
+        symlib.UniverseMachineMStarFit(),
         symlib.Jiang2019RHalf(),
         symlib.PlummerProfile(),
         symlib.Kirby2013Metallicity(),
