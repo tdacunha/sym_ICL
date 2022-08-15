@@ -41,7 +41,7 @@ def main():
 
     base_dir, suite_name, halo_name = parse_sim_dir(sim_dir)
     param = symlib.parameter_table[suite_name]
-    h, hist = symlib.read_subhalos(param, sim_dir)
+    h, hist = symlib.read_subhalos(sim_dir, include_false_selections=True)
 
     out = np.ones(h.shape, dtype=symlib.CORE_DTYPE)
     out["x"], out["v"] = -1, -1

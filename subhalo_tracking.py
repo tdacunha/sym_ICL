@@ -30,8 +30,10 @@ def n_most_bound(xc, vc, x, v, ok, n_core, param):
     order = np.argsort(E[ok])
     orig_idx = np.arange(len(x), dtype=int)[ok][order]
     
-    assert(len(orig_idx) >= n_core)
-    return orig_idx[:n_core]
+    if len(orig_idx) < n_core:
+        return np.ones(n_core)*-1
+    else:
+        return orig_idx[:n_core]
 
 def is_bound(param, dx, dv, ok=None, order=None):
     rmax, vmax, pe, order = symlib.profile_info(param, dx, ok, order)
@@ -73,14 +75,21 @@ def rockstar_cores(snap_info, h, sub_idxs, n_core):
     return core_idxs
 
 class SnapshotData(object):
-    def __init__(self, info, sim_dir, snap, a, h_cmov, param):
-        self.x = symlib.read_particles(info, sim_dir, snap, "x")
-        self.v = symlib.read_particles(info, sim_dir, snap, "v")
-        self.valid = symlib.read_particles(info, sim_dir, snap, "valid")
-        self.owner = symlib.read_particles(info, sim_dir, snap, "ownership")
+    def __init__(self, info, sim_dir, snap, a, h_cmov, param,
+                 include_false_selections=False):
+        ifs = include_false_selections
+        self.x = symlib.read_particles(info, sim_dir, snap, "x",
+                                       include_false_selections=ifs)
+        self.v = symlib.read_particles(info, sim_dir, snap, "v",
+                                       include_false_selections=ifs)
+        self.valid = symlib.read_particles(info, sim_dir, snap, "valid",
+                                           include_false_selections=ifs)
+        self.owner = symlib.read_particles(info, sim_dir, snap, "ownership",
+                                           include_false_selections=ifs)
         try:
             self.infall_cores = symlib.read_particles(
-                info, sim_dir, snap, "infall_core")
+                info, sim_dir, snap, "infall_core",
+                include_false_selections=ifs)
         except:
             self.infall_cores = None
 

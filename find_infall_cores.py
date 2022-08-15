@@ -50,8 +50,9 @@ def main():
         base_dir, suite_name, halo_name = parse_sim_dir(sim_dir)
         print(suite_name, halo_name)
 
-        param = symlib.parameter_table[suite_name]
-        h, hist = symlib.read_subhalos(param, sim_dir)
+        param = symlib.simulation_parameters(sim_dir)
+        h, hist = symlib.read_subhalos(sim_dir, comoving=True,
+                                       include_false_selections=True)
         h_cmov = np.copy(h)
         info = symlib.ParticleInfo(sim_dir)
 
@@ -65,15 +66,22 @@ def main():
             if snap not in hist["merger_snap"][1:]: continue
             print("  snap %3d" % snap)
 
-            sd = sh.SnapshotData(info, sim_dir, snap, scale[snap], h_cmov,param)
+            sd = sh.SnapshotData(info, sim_dir, snap, scale[snap], h_cmov,
+                                 param, include_false_selections=True)
             prof = sh.MassProfile(sd.param, snap, h, sd.x, sd.owner, sd.valid)
         
             sub_idxs = np.where(hist["merger_snap"] == snap)[0]
 
             for i_sub in sub_idxs:
-                if i_sub == 0: continue
+                if i_sub == 0 or hist["false_selection"][i_sub]: continue
                 print("   ", i_sub)
 
+                merger_snap = hist["merger_snap"][i_sub]
+                m_merger = h["mvir"][i_sub,hist["merger_snap"][i_sub]]
+                mp = param["mp"]
+                peak_snap = np.argmax(h["mvir"][i_sub,:])
+                m_peak = hist["mpeak"][i_sub]
+                
                 infall_cores[i_sub] = sh.n_most_bound(
                     h["x"][i_sub,snap], h["v"][i_sub,snap],
                     sd.x[i_sub], sd.v[i_sub], sd.ok[i_sub],
