@@ -62,17 +62,24 @@ def read_ELVES_sats():
     out = np.zeros(len(rows), dtype=DTYPE)
 
     host_idx = 0
-    for ri in range(len(rows)):
-        if ri != 0 and rows[ri][1] != rows[ri][1]:
-            host_idx += 1
-        for ci in range(n):
+    for ri in range(len(rows)):        
+        if ri != 0:
+            host_name = rows[ri][col_starts[1]: col_ends[1]+1].strip()
+            prev_host_name = rows[ri-1][col_starts[1]: col_ends[1]+1].strip()
+            if host_name != prev_host_name:
+                host_idx += 1
+
+        for ci in range(len(names) + 1):
+            if ci == len(names):
+                out[ri]["host_idx"] = host_idx    
+                continue
+
+            name = names[ci]
             token = rows[ri][col_starts[ci]: col_ends[ci]+1].strip()
-            if names[ci] == "host_idx":
-                out[ri][names[ci]] = host_idx
-            elif names[ci] in string_fields:
-                out[ri][names[ci]] = token
-            elif names[ci] in bool_fields:
-                out[ri][names[ci]] = token == "True"
+            if name in string_fields:
+                out[ri][name] = token
+            elif name in bool_fields:
+                out[ri][name] = token == "True"
             else:
                 if len(token) == 0:
                     out[ri][names[ci]] = np.nan
@@ -87,7 +94,7 @@ def read_SAGA():
         ("host", "S40"), ("name", "S40"), ("photo_coverage", "S3"), ("z_source", "S40"),
         ("host_idx", "i8"),
         ("H_alpha", "?"),
-        ("ra", "f8"), ("dec", "f8"), ("host_ra", "f8"), ("host_dec", "f8"), ("r_proj", "f8"), ("m_r", "f8"), ("M_r", "f8"), ("Ms", "f8"), ("dist", "f8"), ("vr_host", "f8"), ("d_vr", "f8"), ("mu_eff", "f8"), ("M_K_host", "f8"), ("spec_coverage", "f8"), ("g-r", "f8")
+        ("ra", "f8"), ("dec", "f8"), ("host_ra", "f8"), ("host_dec", "f8"), ("r_proj", "f8"), ("m_r", "f8"), ("M_r", "f8"), ("Ms", "f8"), ("dist", "f8"), ("vr_host", "f8"), ("d_vr", "f8"), ("mu_eff", "f8"), ("M_K_host", "f8"), ("spec_coverage", "f8"), ("g-r", "f8"), ("internal_host_id", "S40"), ("host_M_r", "f8")
     ]
 
     # Taken almost verbatim from the SAGA website's example code.
@@ -123,15 +130,25 @@ def read_SAGA():
     out["dist"] = saga_joined["DIST"]
     out["photo_coverage"] = saga_joined["PHOT_COVERAGE"]
     out["spec_coverage"] = saga_joined["SPEC_COVERAGE"]
-    
+    out["internal_host_id"] = saga_joined["INTERNAL_HOSTID"]
+
     host_idx = 0
     for i in range(len(out)):
         if i != 0 and out["host"][i] != out["host"][i-1]:
             host_idx += 1
         out["host_idx"][i] = host_idx
     
+    host_id = np.loadtxt("tables/saga_stage_2_Mr.txt", usecols=(0,), dtype=str)
+    Mr = np.loadtxt("tables/saga_stage_2_Mr.txt", usecols=(1,))
+    lookup = {}
+    for i in range(len(host_id)):
+        lookup[host_id[i]] = Mr[i]
+    for i in range(len(out)):
+        out["host_M_r"][i] = lookup[out["internal_host_id"][i].decode("utf-8")]
+
     return out
     
+
 if __name__ == "__main__":
     hosts = read_ELVES_hosts()
     sats = read_ELVES_sats()

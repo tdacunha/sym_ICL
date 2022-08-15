@@ -359,7 +359,7 @@ def axis_ratio_by_rank(x, idx, rank, weighting=None):
 
 def main():
     palette.configure(False) 
-    host_id = 169
+    host_id = 719
     base_dir = ("/oak/stanford/orgs/kipac/users/phil1/" + 
                 "simulations/MWest/Halo%03d/" % host_id)
 

@@ -5,6 +5,7 @@ import palette
 from palette import pc
 import os.path as path
 from colossus.cosmology import cosmology
+import read_mw_sats
 
 invalid_hosts = [6, 9, 10, 16, 17, 31, 36, 37, 40, 42, 43]
 
@@ -385,12 +386,185 @@ def stitching_errors():
     ax.set_ylabel(r"$f_{\rm error}(< r_{\rm peri}/R_{\rm vir})$")
     fig.savefig("../plots/core_plots/core_stitching_disrupt.png")
 
+def core_ok(c, param):
+    mp = param["mp"]/param["h100"]
+    r = np.sqrt(np.sum(c["x"]**2, axis=2))
+    ok = c["ok"] & (c["m_bound"] > 32*mp) & (r > c["r50_bound"])
+    ok[0,:] = False
+    return ok
+    
+def rockstar_stitching_error(h, c, param):
+    c_ok = core_ok(c, param)
+    dr =  np.sqrt(np.sum((h["x"] - c["x"])**2, axis=2))
+    return dr > c["r50_bound"]
+    
+def previous_stitching_err(s_err, c_ok, h_ok):
+    # Couldn't figure out how to do this one without the loop, ha ha
+    out = np.zeros(h_ok.shape, dtype=bool)
+    for hi in range(len(h_ok)):
+        curr_s_err = False
+        for si in range(len(h_ok[0])):
+            if c_ok[hi,si] and h_ok[hi,si]:
+                curr_s_err = s_err[hi,si]
+            out[hi,si] = curr_s_err
+    return out
 
+def rockstar_ok(h, c, param):
+    c_ok = core_ok(c, param)
+    s_err = rockstar_stitching_error(h, c, param)
+    h_ok = h["ok"]
+    curr_s_err = c_ok & s_err & h_ok
+    h_ok[curr_s_err] = False
+    prev_s_err = previous_stitching_err(s_err, c_ok, h_ok)
+    h_ok[prev_s_err] = False
+    return h_ok
+
+def ufd_frequency():
+    palette.configure(False)
+
+    base_dir = "/oak/stanford/orgs/kipac/users/phil1/simulations/ZoomIns/"
+    suite = "SymphonyMilkyWay"
+
+    param = symlib.simulation_parameters(suite)
+    mp = param["mp"]/param["h100"]
+    n_hosts = symlib.n_hosts(suite)
+
+    mw_sats = read_mw_sats.read()
+
+    r_bins = np.linspace(0, 50, 200)
+    
+    fig, ax = plt.subplots()
+    names = ["1e80", "1e85", "1e90", "1e95"]
+    exponents = ["8", "8.5", "9", "9.5"]
+    colors = [pc("r"), pc("o"), pc("b"), pc("p")]
+    mpeak_cuts = [10**8, 10**8.5, 10**9, 10**9.5]
+    
+    c_arrays = [[] for _ in range(len(names))]
+    h_arrays = [[] for _ in range(len(names))]
+
+    for i in range(n_hosts):
+        if i in invalid_hosts: continue
+        print("%2d/%d" % (i, n_hosts))
+
+        sim_dir = symlib.get_host_directory(base_dir, suite, i)
+        h, hist = symlib.read_subhalos(sim_dir)
+        c = symlib.read_cores(sim_dir)
+
+        h_r = np.sqrt(np.sum(h["x"][1:,-1,:]**2, axis=1))
+        h_ok = rockstar_ok(h, c, param)[1:,-1]
+        c_r = np.sqrt(np.sum(c["x"][1:,-1,:]**2, axis=1))
+        c_ok = core_ok(c, param)[1:,-1]
+
+        for j in range(len(mpeak_cuts)):
+            mpeak_ok = hist["mpeak"][1:] > mpeak_cuts[j]
+        
+            h_n = np.cumsum(np.histogram(h_r[h_ok & mpeak_ok],
+                                         bins=r_bins)[0])
+
+            c_n = np.cumsum(np.histogram(c_r[c_ok & mpeak_ok],
+                                         bins=r_bins)[0])
+            all_r = np.hstack([c_r[c_ok & mpeak_ok], 
+                               h_r[h_ok & (~c_ok) & mpeak_ok]])
+            #c_n = np.cumsum(np.histogram(all_r, bins=r_bins)[0])
+
+            c_arrays[j].append(c_n)
+            h_arrays[j].append(h_n)
+
+    ok_1 = mw_sats["class"] >= 4
+    ok_2 = mw_sats["class"] >= 3
+    n_1 = np.cumsum(np.histogram(mw_sats["r"][ok_1], bins=r_bins)[0])
+    n_2 = np.cumsum(np.histogram(mw_sats["r"][ok_2], bins=r_bins)[0])
+    ax.plot(r_bins[:-1], n_2, c=pc("a"),
+               label=r"${\rm probable\ dwarfs}$")
+    ax.plot(r_bins[:-1], n_1, c=pc("k"),
+               label=r"${\rm confirmed\ dwarfs}$")
+
+    for i in range(len(mpeak_cuts)):
+        ax.plot(r_bins[:-1], np.mean(c_arrays[i], axis=0),
+                "-", c=colors[i],
+                label=r"$M_{lim} = 10^{%s}\ M_\odot$" % exponents[i])
+        ax.plot(r_bins[:-1], np.mean(h_arrays[i], axis=0),
+                "--", c=colors[i])
+
+    ax.set_xlabel(r"$r\ ({\rm kpc})$")
+    ax.set_ylabel(r"$N(<r)$")
+    ax.legend(loc="upper left", fontsize=16)
+    ax.set_yscale("log")
+    ax.set_ylim(0.2, 100)
+    ax.set_xlim(0, 50)
+    fig.savefig("../plots/core_plots/ufd_freq_%s.png" % names[i])
+
+def nfw_mass_frac(r_rvir, cvir):
+    r_rs = r_rvir * cvir
+    def M_enc(x): return np.log(1 + x) + 1/(1 + x) - 1
+    return M_enc(r_rs) / M_enc(cvir)
+
+
+def radial_distribution():
+    base_dir = "/oak/stanford/orgs/kipac/users/phil1/simulations/ZoomIns/"
+    suite = "SymphonyMilkyWay"
+    
+    bins = [1e8, 1e9, 1e10, 1e11]
+    colors = [pc("r"), pc("o"), pc("b")]
+
+    r_bins = np.linspace(0, 1, 101)
+    h_n = np.zeros((len(bins)-1, len(r_bins)-1))
+    c_n = np.zeros((len(bins)-1, len(r_bins)-1))
+
+    for i in range(symlib.n_hosts(suite)):
+        if i in invalid_hosts: continue
+        print("%2d/%d" % (i, symlib.n_hosts(suite)))
+
+        sim_dir = symlib.get_host_directory(base_dir, suite, i)
+        param = symlib.simulation_parameters(sim_dir)
+        h, hist = symlib.read_subhalos(sim_dir)
+        c = symlib.read_cores(sim_dir)
+
+        h_r = np.sqrt(np.sum(h["x"][1:,-1,:]**2, axis=1))
+        h_ok = rockstar_ok(h, c, param)[1:,-1]
+        c_r = np.sqrt(np.sum(c["x"][1:,-1,:]**2, axis=1))
+        c_ok = core_ok(c, param)[1:,-1]
+
+        for i in range(len(bins) - 1):
+            mpeak_ok = ((hist["mpeak"] > bins[i]) &
+                        (hist["mpeak"] < bins[i+1]))[1:]
+            h_n[i,:] += np.histogram(h_r[h_ok & mpeak_ok]/h["rvir"][0,-1],
+                                     bins=r_bins)[0]
+            c_n[i,:] += np.histogram(c_r[c_ok & mpeak_ok]/h["rvir"][0,-1],
+                                     bins=r_bins)[0]
+    
+    palette.configure(True)
+
+    fig, ax = plt.subplots()
+    r_mid = (r_bins[1:] + r_bins[:-1]) / 2
+
+    for i in range(len(bins) - 1):
+        h_n[i] = np.cumsum(h_n[i]) / np.sum(h_n[i])
+        c_n[i] = np.cumsum(c_n[i]) / np.sum(c_n[i])
+        ax.plot(r_mid, h_n[i,:], "--", c=colors[i])
+        ax.plot(r_mid, c_n[i,:], "-", c=colors[i])
+
+    ax.plot(r_mid, nfw_mass_frac(r_mid, 10), ":", c="k",
+            label=r"${\rm NFW,\,c_{\rm vir}=10}$")
+    ax.plot([], [], c=colors[0],
+            label=r"$10^8 < M_{\rm peak}/M_\odot < 10^9$")
+    ax.plot([], [], c=colors[1],
+            label=r"$10^9 < M_{\rm peak}/M_\odot < 10^{10}$")
+    ax.plot([], [], c=colors[2],
+            label=r"$10^{10} < M_{\rm peak}/M_\odot < 10^{11}$")
+
+    ax.set_xlabel(r"$r/R_{\rm vir}$")
+    ax.set_ylabel(r"$N(<r/R_{\rm vir})/N(<R_{\rm vir})$")
+    ax.legend(loc="lower right", fontsize=17)
+
+    fig.savefig("../plots/core_plots/radial_cdf.png")
 
 def main():
     #plot_mass_loss()
     #mass_function()
     #survival_time()
-    stitching_errors()
+    #stitching_errors()
+    #ufd_frequency()
+    radial_distribution()
 
 if __name__ == "__main__": main()

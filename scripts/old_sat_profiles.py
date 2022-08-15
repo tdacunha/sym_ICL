@@ -23,45 +23,6 @@ class Projector(object):
         self.f = N / np.sum(N)
         self.r_proj_r = (edges[1:] + edges[:-1]) / 2
 
-def project(x, y, z, px_hat, py_hat, pz_hat):
-    """ project projects the vectors given by (x, y, z) along the orthogonal
-    unit vectors px_hat, py_hat, and pz_hat.
-    """
-    vec = np.array([x, y, z]).T
-    return np.dot(vec, px_hat), np.dot(vec, py_hat), np.dot(vec, pz_hat)
-
-def axes(pz, incline):
-    """ axes returns three orthogonal unit vectors, pz_hat, py_hat, and pz_hat.
-    pz_hat will point in the direction of pz, px_hat will be orthogonal to 
-    both pz and incline, and py_hat will be orthogonal to both of them.
-    In the case where pz and incline or orthogonal, py_hat will be in the same
-    direciton as incline.
-    """
-    pz_hat = pz / np.sqrt(pz[0]**2 + pz[1]**2 + pz[2]**2)
-    px_hat = np.cross(incline, pz_hat)
-    px_hat /= np.sqrt(px_hat[0]**2 + px_hat[1]**2 + px_hat[2]**2)
-    py_hat = np.cross(px_hat, pz_hat)
-    return px_hat, py_hat, pz_hat
-
-def random_vector():
-    """ random_vec returns a unit vector pointing in a random direction.
-    """
-    phi = 2 * np.pi * random.rand(1)[0]
-    theta = np.arccos(2*random.rand(1)[0] - 1)
-
-    x = np.sin(theta)*np.cos(phi)
-    y = np.sin(theta)*np.sin(phi)
-    z = np.cos(theta)
-    
-def random_view(x, v):
-    px_hat, py_hat, pz_hat = axes(random_vector(), random_vector())
-    x1, x2, x3 = project(x[:,0], x[:,1], x[:,2], px_hat, py_hat, pz_hat)
-    v1, v2, v3 = project(v[:,0], v[:,1], v[:,2], px_hat, py_hat, pz_hat)
-
-    v_los = v2
-    r_2d = np.sqrt(x1*x1 + x2*x2)
-    return r_2d, v_los
-
 def p_disk_disrupt(r, ok):
     # The differential correction Mpeak > 8e8 Msun from Samuel et al. 2020
     a, d0, d1 = 0.8, 8, 78
@@ -72,46 +33,31 @@ def p_disk_disrupt(r, ok):
 
     return p
 
-def jackknife_histogram(x, bins, weights, flags):
-    flag_max = int(np.max(flags))
-
-    N_mean, _ = np.histogram(x, bins=bins, weights=weights)
-    N_mean = np.cumsum(N_mean)
-
-    N_all = []
-    for flag in range(flag_max + 1):
-        ok = flags != flag
-        N, _ = np.histogram(x[ok], bins=bins, weights=weights[ok])
-        N_all.append(np.cumsum(N))
-
-    N_err = np.std(N_all, axis=0) * np.sqrt(flag_max + 1)
-    N_log_err = np.std(np.log10(N_all), axis=0) * np.sqrt(flag_max + 1)
-    return N_mean, N_err, N_log_err
-
 def main():
     palette.configure(False)
 
-    elves_host = observations.read_ELVES_hosts()
-    elves = observations.read_ELVES_sats()
-    saga = observations.read_SAGA()
-    saga = saga[saga["M_r"] < SAGA_LIMIT]
+    proj = Projector(1000000)
     
+    fig, ax = plt.subplots()
+
+    ax.plot(proj.r_proj_r, proj.f, "o", c="k")
+    ax.set_ylabel(r"$N/N_{\rm tot}$")
+    ax.set_xlabel(r"$r_{\rm proj}/r_{\rm 3D}$")
+
+    fig.savefig("../plots/core_plots/projection_kernel.png")
+
     base_dir = "/oak/stanford/orgs/kipac/users/phil1/simulations/ZoomIns/"
     n_hosts = symlib.n_hosts("SymphonyMilkyWay")
     param = symlib.simulation_parameters("SymphonyMilkyWay")
     invalid_hosts = [6, 9, 10, 16, 17, 31, 36, 37, 40, 42, 43]
     n_hosts_sim = 0
 
-    proj = Projector(1000000)
-
     weights_h, weights_c = [], []
-    flags_h, flags_c = [], []
     r_proj_h, r_proj_c = [], []
     mpeak_h, mpeak_c = [], []
-    for i_host in range(n_hosts):
-        if i_host in invalid_hosts: continue
-        sim_dir = symlib.get_host_directory(
-            base_dir, "SymphonyMilkyWay", i_host)
+    for i in range(n_hosts):
+        if i in invalid_hosts: continue
+        sim_dir = symlib.get_host_directory(base_dir, "SymphonyMilkyWay", i)
         h, hist = symlib.read_subhalos(sim_dir)
         c = symlib.read_cores(sim_dir)
 
@@ -134,13 +80,11 @@ def main():
                 r_proj_c.append(proj.r_proj_r*r_c[i])
                 mpeak_c.append(np.ones(len(proj.f)) * 
                                hist["mpeak"][i]/h["mvir"][0,-1])
-                flags_c.append(np.ones(len(proj.f))*i_host)
             if h_ok[i,-1]:
                 weights_h.append(proj.f*p_h[i])
                 r_proj_h.append(proj.r_proj_r*r_h[i])
                 mpeak_h.append(np.ones(len(proj.f)) *
                                hist["mpeak"][i]/h["mvir"][0,-1])
-                flags_h.append(np.ones(len(proj.f))*i_host)
 
         n_hosts_sim += 1
 
@@ -148,13 +92,15 @@ def main():
     weights_h = np.hstack(weights_h) / n_hosts_sim
     r_proj_c = np.hstack(r_proj_c)
     r_proj_h = np.hstack(r_proj_h)
-    flags_c = np.hstack(flags_c)
-    flags_h = np.hstack(flags_h)
-
 
     # Make them psuedo-magnitude gaps
     dM_c = -2.5*np.log10(np.hstack(mpeak_c))
     dM_h = -2.5*np.log10(np.hstack(mpeak_h))
+
+    elves_host = observations.read_ELVES_hosts()
+    elves = observations.read_ELVES_sats()
+    saga = observations.read_SAGA()
+    saga = saga[saga["M_r"] < SAGA_LIMIT]
 
     fig, ax = plt.subplots()
 
@@ -176,41 +122,22 @@ def main():
     bins_saga = np.linspace(0, saga_dM_r_lim, 400)
     bins_elves = np.linspace(0, elves_dM_V_lim, 400)
 
-    print("jackknifing")
-    weights_saga = 100/saga["spec_coverage"][saga_ok]/saga_n_host
-    N_saga, N_err_saga, N_log_err_saga = jackknife_histogram(
-        dM_r_saga[saga_ok], bins_saga, weights_saga,
-        saga["host_idx"][saga_ok]
+    N_saga, edges_saga = np.histogram(
+        dM_r_saga[saga_ok], bins=bins_saga,
+        weights=100/saga["spec_coverage"][saga_ok]/saga_n_host
     )
-    weights_elves = elves["p_sat"][elves_ok]/elves_n_host
-    N_elves, N_err_elves, N_log_err_elves = jackknife_histogram(
-        dM_V_elves[elves_ok], bins_elves, weights_elves,
-        elves["host_idx"][elves_ok]
+    N_elves, edges_elves = np.histogram(
+        dM_V_elves[elves_ok], bins=bins_elves,
+        weights=elves["p_sat"][elves_ok]/elves_n_host
     )
+    N_c, edges_c = np.histogram(dM_c[c_ok], bins=400, weights=weights_c[c_ok])
+    N_h, edges_h = np.histogram(dM_h[h_ok], bins=400, weights=weights_h[h_ok])
 
-    print(N_elves)
-    print(N_err_elves)
-    print(N_log_err_elves)
+    N_saga, N_elves = np.cumsum(N_saga), np.cumsum(N_elves)
+    N_c, N_h = np.cumsum(N_c), np.cumsum(N_h)
 
-    edges_c = np.linspace(np.min(dM_c), np.max(dM_c), 400)
-
-    N_c, N_err_c, N_log_err_c = jackknife_histogram(
-        dM_c[c_ok], edges_c, weights_c[c_ok], flags_c[c_ok])
-    edges_h = np.linspace(np.min(dM_h), np.max(dM_h), 400)
-    N_h, N_err_h, N_log_err_h = jackknife_histogram(
-        dM_h[h_ok], edges_h, weights_h[h_ok], flags_h[h_ok])
-    print("done jackknifing")
-    
-    ax.plot(bins_saga[1:], N_saga, color=pc("r"), label=r"${\rm SAGA}$")
-    high_saga = 10**(np.log10(N_saga) + N_log_err_saga)
-    low_saga = 10**(np.log10(N_saga) - N_log_err_saga)
-    ax.fill_between(bins_saga[1:], low_saga, high_saga,
-                    color=pc("r"), alpha=0.2)
-    ax.plot(bins_elves[1:], N_elves, color=pc("b"), label=r"${\rm ELVES}$")
-    high_elves = 10**(np.log10(N_elves) + N_log_err_elves)
-    low_elves = 10**(np.log10(N_elves) - N_log_err_elves)
-    ax.fill_between(bins_elves[1:], low_elves, high_elves,
-                    color=pc("b"), alpha=0.2)
+    ax.plot(edges_saga[1:], N_saga, color=pc("r"), label=r"${\rm SAGA}$")
+    ax.plot(edges_elves[1:], N_elves, color=pc("b"), label=r"${\rm ELVES}$")
     ax.set_yscale("log")
     ax.set_xlabel(r"$\Delta m = m_{\rm sat} - m_{\rm host}$")
     ax.set_ylabel(r"$N(<\Delta m)$")
@@ -226,14 +153,15 @@ def main():
     bins = np.linspace(15, 310, 200)
 
     N_cut_saga = np.array([0.3, 1, 3])
-    N_cut_elves = np.array([0.3, 1, 3, 8])
+    N_cut_elves = np.array([0.3, 1, 3, 10])
     i_cut_saga = np.searchsorted(N_saga, N_cut_saga)
     i_cut_elves = np.searchsorted(N_elves, N_cut_elves)
-
+    print(N_saga[i_cut_saga - 1])
+    print(N_elves[i_cut_elves - 1])
     i_cut_c = np.searchsorted(N_c, N_cut_elves)
     i_cut_h = np.searchsorted(N_h, N_cut_elves)
-    dM_r_cut_saga = bins_saga[i_cut_saga + 1]
-    dM_V_cut_elves = bins_elves[i_cut_elves + 1]
+    dM_r_cut_saga = edges_saga[i_cut_saga + 1]
+    dM_V_cut_elves = edges_elves[i_cut_elves + 1]
     dM_cut_c = edges_c[i_cut_c + 1]
     dM_cut_h = edges_h[i_cut_h + 1]
 
@@ -253,7 +181,6 @@ def main():
     r_weights[r_weights == 0] = 1
     r_weights = np.max(r_weights)/r_weights
 
-    """
     print(dM_r_cut_saga)
     for i in range(len(dM_r_cut_saga)):
         ok = (dM_r_saga < dM_r_cut_saga[i]) & (saga["r_proj"] < R_MAX)
@@ -261,7 +188,6 @@ def main():
                 histtype="step", ls="--",
                 weights=100/saga["spec_coverage"][ok]/saga_n_host,
                 bins=bins, lw=3)
-    """
 
     for i in range(len(dM_V_cut_elves)):
         ok = ((dM_V_elves < dM_V_cut_elves[i]) & 
@@ -281,7 +207,7 @@ def main():
 
 
     ax.plot([], [], pc("k"), label=r"${\rm ELVES}$")
-    #ax.plot([], [], "--", c=pc("k"), label=r"${\rm SAGA}$")
+    ax.plot([], [], "--", c=pc("k"), label=r"${\rm SAGA}$")
     ax.plot([], [], pc("r"), label=r"${\rm core-tracking}$")
     ax.plot([], [], pc("b"), label=r"${\rm Rockstar}$")
         
