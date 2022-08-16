@@ -1,7 +1,5 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import palette
-from palette import pc
 import subhalo_tracking as sh
 import os.path as path
 import symlib
@@ -36,8 +34,6 @@ def write_infall_cores(sim_dir, idxs):
         idxs.tofile(fp)
 
 def main():
-    palette.configure(False)
-
     config_name, idx_str = sys.argv[1], sys.argv[2]
     target_idx = int(idx_str)
     sim_dirs = get_sim_dirs(config_name)

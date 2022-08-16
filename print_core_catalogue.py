@@ -1,7 +1,5 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import palette
-from palette import pc
 import subhalo_tracking as sh
 import os.path as path
 import symlib
@@ -45,8 +43,6 @@ def calculate_min_snap(prev_file_names):
     return int(np.max(snaps))
 
 def main():
-    palette.configure(False)
-
     config_name, idx_str = sys.argv[1], sys.argv[2]
     target_idx = int(idx_str)
     sim_dirs = get_sim_dirs(config_name)
@@ -128,7 +124,6 @@ def main():
             print("   ", i_sub)
 
             if tracks[i_sub] is None:
-                print(tracks)
                 tracks[i_sub] = sh.SubhaloTrack(
                     i_sub, sd, sd.infall_cores[i_sub], param)
             else:

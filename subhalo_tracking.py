@@ -6,8 +6,6 @@ import matplotlib.colors as mpl_colors
 from colossus.cosmology import cosmology
 from colossus.halo import mass_so
 import os.path as path
-import palette
-from palette import pc
 import scipy.signal as signal
 import scipy.interpolate as interpolate
 
@@ -21,6 +19,9 @@ def distance(x, x0):
     return np.sqrt(np.sum(delta(x, x0)**2, axis=1))
 
 def n_most_bound(xc, vc, x, v, ok, n_core, param):
+    if np.sum(ok) < n_core:
+        return np.ones(n_core)*-1
+
     dx, dv = delta(x, xc), delta(v, vc)
 
     ke = 0.5*np.sum(dv**2, axis=1)
@@ -30,10 +31,7 @@ def n_most_bound(xc, vc, x, v, ok, n_core, param):
     order = np.argsort(E[ok])
     orig_idx = np.arange(len(x), dtype=int)[ok][order]
     
-    if len(orig_idx) < n_core:
-        return np.ones(n_core)*-1
-    else:
-        return orig_idx[:n_core]
+    return orig_idx[:n_core]
 
 def is_bound(param, dx, dv, ok=None, order=None):
     rmax, vmax, pe, order = symlib.profile_info(param, dx, ok, order)
@@ -291,6 +289,9 @@ class MassProfile(object):
     
         
 def main():
+    import palette
+    from palette import pc
+
     palette.configure(False)
     
     base_dir = "/home/phil/code/src/github.com/phil-mansfield/symphony_pipeline/tmp_data"
