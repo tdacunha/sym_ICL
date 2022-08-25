@@ -2,7 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import symlib
 
-BUGGY_HOSTS = [6, 9, 10, 16, 17, 31, 36, 37, 40, 42, 43]
 FE_H_LOW = -1.5
 FE_H_HIGH = -0.5
 
@@ -127,7 +126,8 @@ def weighted_mean_profile(sim_dir, r_bins, r, mp_star, x,
 
 def main():
     base_dir = "/oak/stanford/orgs/kipac/users/phil1/simulations/ZoomIns/"
-    suite = "SymphonyMilkyWay"
+    #suite = "SymphonyMilkyWay"
+    suite = "MWest"
 
     param = symlib.simulation_parameters(suite)
     n_hosts = symlib.n_hosts(suite)
@@ -158,7 +158,6 @@ def main():
     mpeak_sub = []
     n_hosts_used = 0
     for i in range(n_hosts):
-        if i in BUGGY_HOSTS: continue
         print("Host %2d/%d" % (i, n_hosts))
 
         # This function lets you loop over all the subhalo directories without
@@ -175,6 +174,12 @@ def main():
         # a couple small ones for debugging and then changing it back to
         # everything later. Don't include halo 0.
         target_subs = np.arange(1, len(h))
+
+        target_subs_ok = np.zeros(len(target_subs), dtype=bool)
+        for i in range(len(target_subs)):
+            target_subs_ok[i] = symlib.is_real_confirmed(
+                part_info, h, target_subs[i])
+        target_subs = target_subs[target_subs_ok]
 
         # mp_star is a list of arrays giving the stellar mass of each particle.
         mp_star, _, m_star, r_half, Fe_H = symlib.tag_stars(
@@ -260,7 +265,7 @@ def main():
     ax.set_ylim(1e-4, None)
     ax.legend(loc="upper right", fontsize=17)
 
-    fig.savefig("../plots/stellar_halo/average_density.png")
+    fig.savefig("../plots/stellar_halo/average_density_%s.png" % suite)
 
     fig, ax = plt.subplots()
     r_mid = np.sqrt(r_bins[1:]*r_bins[:-1])
@@ -289,7 +294,7 @@ def main():
     ax.set_ylim(1e-4, None)
     ax.legend(loc="upper right", fontsize=17)
 
-    fig.savefig("../plots/stellar_halo/Fe_H_density.png")
+    fig.savefig("../plots/stellar_halo/Fe_H_density_%s.png" % suite)
 
     fig, ax = plt.subplots()
     r_mid = np.sqrt(r_bins[1:]*r_bins[:-1])
@@ -325,7 +330,7 @@ def main():
     ax.legend(loc="upper right", fontsize=17)
     ylo, yhi = plt.ylim()
     plt.ylim(ylo, yhi + 0.15*(yhi - ylo))
-    fig.savefig("../plots/stellar_halo/average_Fe_H.png")
+    fig.savefig("../plots/stellar_halo/average_Fe_H_%s.png" % suite)
 
     fig, ax = plt.subplots()
 
@@ -345,6 +350,6 @@ def main():
     ax.set_yscale("log")
     ax.set_ylim(1e4, None)
 
-    fig.savefig("../plots/stellar_halo/star_contribution_cdf.png")
+    fig.savefig("../plots/stellar_halo/star_contribution_cdf_%s.png" % suite)
 
 if __name__ == "__main__": main()
