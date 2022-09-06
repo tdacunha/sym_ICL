@@ -6,8 +6,6 @@ import matplotlib.colors as mpl_colors
 from colossus.cosmology import cosmology
 from colossus.halo import mass_so
 import os.path as path
-import palette
-from palette import pc
 import scipy.signal as signal
 import scipy.interpolate as interpolate
 
@@ -21,6 +19,9 @@ def distance(x, x0):
     return np.sqrt(np.sum(delta(x, x0)**2, axis=1))
 
 def n_most_bound(xc, vc, x, v, ok, n_core, param):
+    if np.sum(ok) < n_core:
+        return np.ones(n_core)*-1
+
     dx, dv = delta(x, xc), delta(v, vc)
 
     ke = 0.5*np.sum(dv**2, axis=1)
@@ -30,7 +31,6 @@ def n_most_bound(xc, vc, x, v, ok, n_core, param):
     order = np.argsort(E[ok])
     orig_idx = np.arange(len(x), dtype=int)[ok][order]
     
-    assert(len(orig_idx) >= n_core)
     return orig_idx[:n_core]
 
 def is_bound(param, dx, dv, ok=None, order=None):
@@ -73,11 +73,24 @@ def rockstar_cores(snap_info, h, sub_idxs, n_core):
     return core_idxs
 
 class SnapshotData(object):
-    def __init__(self, info, sim_dir, snap, a, h_cmov, param):
-        self.x = symlib.read_particles(info, sim_dir, snap, "x")
-        self.v = symlib.read_particles(info, sim_dir, snap, "v")
-        self.valid = symlib.read_particles(info, sim_dir, snap, "valid")
-        self.owner = symlib.read_particles(info, sim_dir, snap, "ownership")
+    def __init__(self, info, sim_dir, snap, a, h_cmov, param,
+                 include_false_selections=False):
+        ifs = include_false_selections
+        self.x = symlib.read_particles(info, sim_dir, snap, "x",
+                                       include_false_selections=ifs)
+        self.v = symlib.read_particles(info, sim_dir, snap, "v",
+                                       include_false_selections=ifs)
+        self.valid = symlib.read_particles(info, sim_dir, snap, "valid",
+                                           include_false_selections=ifs)
+        self.owner = symlib.read_particles(info, sim_dir, snap, "ownership",
+                                           include_false_selections=ifs)
+        try:
+            self.infall_cores = symlib.read_particles(
+                info, sim_dir, snap, "infall_core",
+                include_false_selections=ifs)
+        except:
+            self.infall_cores = None
+
         self.ok = [None]*len(self.x)
         
         for i in range(len(self.x)):
@@ -85,7 +98,7 @@ class SnapshotData(object):
             self.v[i] = symlib.set_units_v(self.v[i], h_cmov[0,snap], a, param)
             self.ok[i] = self.valid[i] & (self.owner[i] == 0)
             
-        self.mp, self.eps = symlib.set_units_param(a, param)
+        self.mp, self.eps = symlib.set_units_parameters(a, param)
         self.snap = snap
         self.param = param
 
@@ -276,6 +289,9 @@ class MassProfile(object):
     
         
 def main():
+    import palette
+    from palette import pc
+
     palette.configure(False)
     
     base_dir = "/home/phil/code/src/github.com/phil-mansfield/symphony_pipeline/tmp_data"

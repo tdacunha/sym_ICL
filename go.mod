@@ -1,4 +1,4 @@
-module github.com/phil-mansfield/lmc_ges_tracking
+module github.com/phil-mansfield/symphony_pipeline
 
 go 1.14
 
