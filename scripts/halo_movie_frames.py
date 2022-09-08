@@ -6,198 +6,200 @@ import os
 import sys
 import os.path as path
 import matplotlib.colors as mpl_colors
+import symlib
+import scipy.spatial as spatial
+import scipy.special as special
+from colossus.halo import mass_so
 
 try:
     import palette
     palette.configure(False)
+    from palette import pc
 except:
-    pass
+    def pc(c): return c
+
+SUITE = "SymphonyMilkyWayLR"
+SUB_INDEX = 33
+HOST_INDEX = 4
+
+BASE_OUT_DIR = "/home/users/phil1/code/src/github.com/phil-mansfield/symphony_pipeline/plots/movie_frames"
+
+def spline(x):
+    r1 = x <= 1
+    r2 = (x > 1) & (x <= 2)
     
-H100 = 0.7
-MP_DM = 2.8e5/0.7 # In Msun
-EPS = 170e-3/H100 # In ckpc
+    out = np.zeros(len(x))
+    out[r1] = 1 - (3/2)*x[r1]**2 + 0.75*x[r1]**3
+    out[r2] = 0.25*(2 - x[r2])**3
+
+    return out
+    
+def rho_sph(ri, mi, n_dim):
+    r = np.max(ri)/2
+    Vr = np.pi**(n_dim/2)*r**n_dim / special.gamma(n_dim/2 + 1)
+    # No need to add the central particle's mass: It's already in the sample
+    # if it's a real particle and its mass is zero if it's a test point.
+    return np.sum(mi*spline(ri/r))/Vr
+
+def sph_density(x, m, test, k=64, return_tree=False):
+    k = min(k, len(x))
+    tree = spatial.cKDTree(x)
+    
+    rho = np.zeros(len(test))
+    for i in range(len(test)):
+        ri, idx = tree.query(test[i], k)
+        rho[i] = rho_sph(ri, m[idx], len(x[0]))
+
+    if return_tree:
+        return rho, tree
+    else:
+        return rho
+
+def eval_grid(r, center, pts):
+    x = np.linspace(center[0] - r, center[0] + r, pts)
+    y = np.linspace(center[1] - r, center[1] + r, pts)
+    xy, yx = np.meshgrid(x, y)
+    xy, yx = xy.flatten(), yx.flatten()
+    return np.vstack((xy, yx)).T
+
+def density_2d_proj(x, m, test, dim_x=0, dim_y=1, k=64, return_tree=False):
+    xx = np.zeros((len(x), 2))
+    xx[:,0], xx[:,1] = x[:,dim_x], x[:,dim_y]
+    if test.shape[1] == 2:
+        yy = test
+    else:
+        yy = np.zeros((len(test), 2))
+        yy[:,0], yy[:,1] = test[:,dim_x], test[:,dim_y]
+
+    return sph_density(xx, m, yy, k=k)
+
+def is_bound(param, dx, dv, ok=None, order=None):
+    rmax, vmax, pe, order = symlib.profile_info(param, dx, ok, order)
+    pe *= vmax**2
+    ke = 0.5*np.sum(dv**2, axis=1)
+
+    if ok is None:
+        return pe + ke < 0, order
+    else:
+        return (pe + ke < 0) & ok, order
+
+def is_bound_iter(n_iter, param, dx, dv, ok=None, order=None):
+    ok, order = is_bound(param, dx, dv, ok, order)
+    n_bound = np.sum(ok)
+
+    for i in range(n_iter - 1):
+        ok, order = is_bound(param, dx, dv, ok, order)
+        n_bound_i = np.sum(ok)
+        if n_bound_i == n_bound: break
+
+    return ok, order
 
 def main():
-    # Parse command line arguements
-    sim_dir = sys.argv[1] # directory containing the HaloXXX directories
-    host_id = int(sys.argv[2]) # ID of the host halo
-    h_idx = int(sys.argv[3]) # index of the subhalo in mergers.dat
-    out_base_dir = sys.argv[4] # base dir where the frames are stored
-    # You can choose what snapshot to tag at, if you want.
-    if len(sys.argv) > 5:
-        tag_snap = int(sys.argv[5])
-    else:
-        tag_snap = None
-        
-    snaps, scales = np.arange(236), lib.scale_factors()
+    base_dir = "/oak/stanford/orgs/kipac/users/phil1/simulations/ZoomIns/"
         
     # Work out subdirectory names and create as needed.
-    base_dir = path.join(sim_dir, "Halo%03d" % host_id)
-    out_dir = path.join(path.join(
-        out_base_dir, "Halo%03d" % host_id), "h%03d" % h_idx)
-    os.makedirs(out_dir, exist_ok=True)
+    print(HOST_INDEX)
+    out_dir = path.join(BASE_OUT_DIR, "host_%d" % HOST_INDEX,
+                        "sub_%d" % SUB_INDEX)
+    print(out_dir)
+    os.makedirs(out_dir, exist_ok=True)    
+    sim_dir = symlib.get_host_directory(base_dir, SUITE, HOST_INDEX)
+    i_sub = SUB_INDEX
 
-    # *****
-    # Read in mergers.dat, which contains main branch information for the
-    # biggest mergers in the host's history.
-    _, mergers = lib.read_mergers(base_dir)
+    # Load simulation information.
+    param = symlib.simulation_parameters(sim_dir)
+    cosmo = symlib.colossus_parameters(param)
+    h100 = param["h100"]
+    mp, eps = param["mp"]/h100, param["eps"]/h100
+    h, hist = symlib.read_subhalos(sim_dir)
+    h_cmov, hist_cmov = symlib.read_subhalos(sim_dir, comoving=True)
+    c = symlib.read_cores(sim_dir)
+    scale = symlib.scale_factors(sim_dir)
+    snaps = np.arange(len(scale), dtype=int)    
 
-    # *****
-    # If needed, compute the snapshot where the halo first falls into the host.
-    if tag_snap is None:
-        ok = mergers[h_idx]["mvir"] > 0
-        tag_snap = lib.merger_snap(
-            mergers[0], mergers[h_idx,ok]["x"], snaps[ok]) - 1
-    
-    # *****
-    # Create the galaxy-halo model. This is done by loading your favorite
-    # Mstar-Mhalo relation, Rgalaxy-Rhalo relation, and stellar mass profile
-    # model.
-    galaxy_halo_model = star_tagging.GalaxyHaloModel(
-        star_tagging.UniverseMachineMStar(),
-        star_tagging.Jiang2019RHalf(),
-        star_tagging.PlummerProfile()
-    )
+    r_c = np.sqrt(np.sum(c["x"]**2, axis=2))
+    r_half = c["r50_bound"]
+    c["ok"] = c["ok"] & (r_c > c["r50_bound"]) & (c["m_bound"] > 32*mp)
 
-    # *****
-    # Find the stellar masses. This function handles all the boilerplate code
-    # for you.
-    mp_star, ranks = star_tagging.default_tag(
-        base_dir, MP_DM, galaxy_halo_model, mergers, h_idx, tag_snap)
-    
-    # Loop over the snapshots to create frames
     frame_idx = 0
-    fig, ax = plt.subplots(1, 2, figsize=(16, 8))
+    # fig, ax = plt.subplots(1, 2, figsize=(16, 8))
+    fig, axs = plt.subplots(1, 2, figsize=(16, 8))
+    ax, ax_b = axs[0], axs[1]
     already_found = False
+    c_range = None
+    
+    info = symlib.ParticleInfo(sim_dir)
+
+    cores = symlib.read_particles(info, sim_dir, None, "infall_core")
+
     for snap in range(len(snaps)):
-        # Don't start plotting until the halo actually exists.
-        if not already_found and (mergers[h_idx,snap]["mvir"] == -1 or 
-                                  snap < tag_snap or
-                                  mergers[0,snap]["mvir"] == -1):
-            continue
-        already_found=True
-
-        # When testing locally, you might not have all the snapshots. but in
-        # general, don't just try-and-except things.
-        try:
-            # *****
-            # Read in particles. You can also read in velocities and potential
-            # energies by adding "v" and "phi" to the list argument. They'll
-            # be the scond and third return values.
-            x, _, _ = lib.read_part_file(base_dir, snap, h_idx, ["x"])
-        except:
-            continue
-
+        #if snap < len(snaps) - 10: continue
+        if snap < hist["first_infall_snap"][i_sub]: continue
         print(snap)
-        
-        # *****
-        # Remove as-yet unaccreted particles, convert to physical, center
-        # around the host. You could also give velocities as the second argument
-        # and get them cleaned as the second return value.
-        # idx is the indices of accreted particles into the full particle array
-        # (e.g. something with the same length as the mp array)
-        x, _, idx = star_tagging.clean_particles(
-            x, None, mergers[0,snap], H100, scales[snap])
 
-        # *****
-        # Load particles into the ranks so you can calculate things like the
-        # core position.
-        ranks.load_particles(x, None, idx)
+        x = symlib.read_particles(info, sim_dir, snap, "x", owner=i_sub)
+        v = symlib.read_particles(info, sim_dir, snap, "v", owner=i_sub)
+        x_core = x[cores[i_sub]]
+        ok = symlib.read_particles(info, sim_dir, snap, "valid", owner=i_sub)
+
+        x = symlib.set_units_x(x[ok], h_cmov[0,snap], scale[snap], param)
+        v = symlib.set_units_v(v[ok], h_cmov[0,snap], scale[snap], param)
+        x_core = symlib.set_units_x(x_core, h_cmov[0,snap], scale[snap], param)
+        mp_dm = np.ones(len(x)) * mp
+
+        if c[i_sub,snap]["ok"]:
+            dx = x - c[i_sub,snap]["x"]
+            dv = v - c[i_sub,snap]["v"]
+            ok_b, order = is_bound_iter(10, param, dx, dv, ok=ok)
 
         # Everything from here on is just plotting nonsense.
-        r_plot = 4*rvir_max(mergers[h_idx,:], scales)
-        plot_frame(fig, ax, mergers[0,snap], mergers[h_idx,snap], scales[snap],
-                   r_plot, x, idx, ranks.xc, mp_star)
-        
-        plt.savefig(path.join(out_dir, "frame_%03d.png" % frame_idx))
+        r_max, grid_pts = np.max(h[0,:]["rvir"]), 201
+        r_max_b = np.max(c[i_sub,:]["r50_bound"])
+        grid = eval_grid(r_max, [0, 0], grid_pts)
+        grid_b = eval_grid(r_max_b, [0, 0], grid_pts)
+
+        vmin, vmax = 2.5, 6.5
+
+        rho_proj = density_2d_proj(x[ok], mp_dm[ok], grid, k=64)
+        rho_proj = np.log10(np.reshape(rho_proj, (grid_pts, grid_pts)))
+        if c[i_sub,snap]["ok"] and np.sum(ok_b) > 1:
+            rho_proj_b = density_2d_proj(dx[ok_b], mp_dm[ok_b], grid_b, k=64)
+            rho_proj_b = np.log10(np.reshape(rho_proj_b, (grid_pts, grid_pts)))
+        else:
+            rho_proj_b = vmin * np.ones((grid_pts, grid_pts))
+
+        ax.cla()
+        ax_b.cla()
+
+        ax.imshow(rho_proj, vmin=vmin, vmax=vmax, origin="lower",
+                  cmap="bone", extent=[-r_max, r_max, -r_max, r_max])
+        ax.set_xlim((-r_max, r_max))
+        ax.set_ylim((-r_max, r_max))
+        ax_b.imshow(rho_proj_b, vmin=vmin, vmax=vmax, origin="lower",
+                    cmap="bone", extent=[-r_max_b, r_max_b, -r_max_b, r_max_b])
+        ax_b.set_xlim((-r_max_b, r_max_b))
+        ax_b.set_ylim((-r_max_b, r_max_b))
+
+        if c["ok"][i_sub,snap]:
+            symlib.plot_circle(ax, c["x"][i_sub,snap,0], c["x"][i_sub,snap,1],
+                               c["r50_bound"][i_sub,snap], lw=1.5, c=pc("r"))
+            symlib.plot_circle(ax_b, 0, 0, c["r50_bound"][i_sub,snap],
+                               lw=1.5, c=pc("r"))
+            dx_core = x_core - c["x"][i_sub,snap]
+            ax_b.plot(dx_core[:10,0], dx_core[:10,1], ".", alpha=0.5, c=pc("r"))
+            if h["ok"][i_sub,snap]:
+                dx_h = h["x"][i_sub,snap] - c["x"][i_sub,snap]
+                symlib.plot_circle(ax_b, dx_h[0], dx_h[1], h["rvir"][i_sub,snap],
+                                   lw=1.5, c=pc("b"))
+        if h["ok"][i_sub,snap]:
+            symlib.plot_circle(ax, h["x"][i_sub,snap,0], h["x"][i_sub,snap,1],
+                               h["rvir"][i_sub,snap], lw=1.5, c=pc("b"))
+
+        ax.plot(x_core[:10,0], x_core[:10,1], ".", alpha=0.5, c=pc("r"))
+        symlib.plot_circle(ax, 0, 0, h["rvir"][0,snap], lw=3, c="w")
+
+        fig.savefig(path.join(out_dir, "frame_%03d.png" % frame_idx))
         frame_idx += 1
-
-def rvir_max(halo, scale):
-    i = np.argmax(halo["rvir"])
-    return halo["rvir"][i]*scale[i]/H100*1e3
-
-initial_r_half = None
-dm_c_range = None
-star_c_range = None
-
-def plot_frame(fig, ax, host, sub, scale, r_max, x, idx, x_core, mp_star):
-    global initial_r_half
-    global dm_c_range
-    global star_c_range
-    
-    dx = np.zeros(x.shape)
-    for dim in range(3): dx[:,dim] = x[:,dim] - x_core[dim]
-
-    mp_dm = np.ones(len(idx))*MP_DM
-    mp_star = mp_star[idx]
-
-
-    r_half = calc_r_half(dx, mp_star)
-    if initial_r_half is None:
-        initial_r_half = r_half
-        
-    ax[0].clear()
-    ax[1].clear()
-    
-    extent = [-r_max, r_max, -r_max, r_max]
-    r_max_star = initial_r_half*10
-    
-    if dm_c_range is None:
-        dm_c_range = get_c_range(
-            dx[:,0], dx[:,1], mp_dm, r_max, 100, 0.99)
-    if star_c_range is None:
-        star_c_range = get_c_range(
-            dx[:,0], dx[:,1], mp_star, r_max_star, 50, 0.99)
-    
-    H, _, _, im = ax[0].hist2d(
-        dx[:,0], dx[:,1], bins=100, weights=mp_dm,
-        range=((-r_max, r_max), (-r_max, r_max)),
-        norm=mpl_colors.LogNorm(dm_c_range[0], dm_c_range[1]),
-        cmap="Greys"
-    )
-
-    H, _, _, im = ax[1].hist2d(
-        dx[:,0], dx[:,1], bins=100, weights=mp_star,
-        range=((-r_max_star, r_max_star), (-r_max_star, r_max_star)),
-        norm=mpl_colors.LogNorm(star_c_range[0], star_c_range[1]),
-        cmap="Greys",
-    )
-
-    rvir_sub = sub["rvir"]*1e3/H100*scale
-    rvir_host = host["rvir"]*1e3/H100*scale
-    x_sub = sub["x"]*1e3/H100*scale
-    x_host = host["x"]*1e3/H100*scale
-
-    if host["mvir"] > 0:
-        plot_circle(ax[0], -x_core[0], -x_core[1], rvir_host, "tab:orange", 4)
-        plot_circle(ax[1], -x_core[0], -x_core[1], rvir_host, "tab:orange", 5)
-
-    if sub["mvir"] > 0:
-        plot_circle(ax[0], (x_sub[0]-x_host[0])-x_core[0],
-                    (x_sub[1]-x_host[1])-x_core[1], rvir_sub,
-                    "tab:blue", 3)
-        ax[1].plot([(x_sub[0]-x_host[0])-x_core[0]],
-                   [(x_sub[1]-x_host[1])-x_core[1]], "x", color="tab:blue")
-        plot_circle(ax[1], (x_sub[0]-x_host[0])-x_core[0],
-                    (x_sub[1]-x_host[1])-x_core[1], rvir_sub,
-                    "tab:blue", 4)
-
-    plot_circle(ax[0], 0, 0, r_half, "tab:red", 1)
-    plot_circle(ax[1], 0, 0, r_half, "tab:red", 3)
-    
-    ax[0].set_xlim(-r_max, r_max)
-    ax[1].set_xlim(-12*initial_r_half, 12*initial_r_half)
-    ax[0].set_ylim(-r_max, r_max)
-    ax[1].set_ylim(-12*initial_r_half, 12*initial_r_half)
-    ax[0].set_xlabel(r"$X\ ({\rm kpc})$")
-    ax[1].set_xlabel(r"$X\ ({\rm kpc})$")
-    ax[0].set_ylabel(r"$Y\ ({\rm kpc})$")
-
-def plot_circle(ax, x0, y0, r, color, lw):
-    th = np.linspace(0, 2*np.pi, 100)
-    y = np.sin(th)*r + y0
-    x = np.cos(th)*r + x0
-    ax.plot(x, y, c=color, lw=lw)
 
 def calc_r_half(dx, mp):
     r = np.sqrt(np.sum(dx**2, axis=1))
@@ -208,17 +210,12 @@ def calc_r_half(dx, mp):
     m_enc = np.cumsum(m)
     return 10**bins[np.searchsorted(m_enc, m_enc[-1]/2)+1]
 
-def get_c_range(x, y, mp, r_max, bins, frac):
-    range = ((-r_max, r_max), (-r_max, r_max))
-    H, _, _ = np.histogram2d(x, y, weights=mp, range=range, bins=bins)
-    H = np.sort(H.flatten())
-
-    H_sum = np.cumsum(H)
-    H_tot = H_sum[-1]
-    i_min = np.searchsorted(H_sum, H_tot*(1 - frac)/2)
-    i_max = np.searchsorted(H_sum, H_tot*(1 + frac)/2)
-
-    return H[i_min], H[i_max]
-    
+def get_c_range(x, frac):
+    x = np.sort(x.flatten())
+    x_sum = np.cumsum(x)
+    x_tot = x_sum[-1]
+    i_min = np.searchsorted(x_sum, x_tot*(1-frac)/2)
+    i_max = np.searchsorted(x_sum, x_tot*(1+frac)/2)
+    return x[i_min], x[-1]
     
 if __name__ == "__main__": main()
