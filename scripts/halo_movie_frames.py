@@ -19,8 +19,11 @@ except:
     def pc(c): return c
 
 SUITE = "SymphonyMilkyWayLR"
-SUB_INDEX = 33
+SUB_INDEX = 5
 HOST_INDEX = 4
+VMIN, VMAX = 2.5, 7.0
+K = 128
+CMAP = "bone"
 
 BASE_OUT_DIR = "/home/users/phil1/code/src/github.com/phil-mansfield/symphony_pipeline/plots/movie_frames"
 
@@ -133,8 +136,7 @@ def main():
     cores = symlib.read_particles(info, sim_dir, None, "infall_core")
 
     for snap in range(len(snaps)):
-        #if snap < len(snaps) - 10: continue
-        if snap < hist["first_infall_snap"][i_sub]: continue
+        if snap < hist["first_infall_snap"][i_sub] - 10: continue
         print(snap)
 
         x = symlib.read_particles(info, sim_dir, snap, "x", owner=i_sub)
@@ -142,65 +144,91 @@ def main():
         x_core = x[cores[i_sub]]
         ok = symlib.read_particles(info, sim_dir, snap, "valid", owner=i_sub)
 
-        x = symlib.set_units_x(x[ok], h_cmov[0,snap], scale[snap], param)
-        v = symlib.set_units_v(v[ok], h_cmov[0,snap], scale[snap], param)
+        x = symlib.set_units_x(x, h_cmov[0,snap], scale[snap], param)
+        v = symlib.set_units_v(v, h_cmov[0,snap], scale[snap], param)
         x_core = symlib.set_units_x(x_core, h_cmov[0,snap], scale[snap], param)
         mp_dm = np.ones(len(x)) * mp
 
+        plot_core = False
         if c[i_sub,snap]["ok"]:
-            dx = x - c[i_sub,snap]["x"]
-            dv = v - c[i_sub,snap]["v"]
+            x_center = c[i_sub,snap]["x"]
+            v_center = c[i_sub,snap]["v"]
+            plot_core = True
+        elif h[i_sub,snap]["ok"]:
+            x_center = h[i_sub,snap]["x"]
+            v_center = h[i_sub,snap]["v"]
+            plot_core = True
+
+        if plot_core:
+            dx = x - x_center
+            dv = v - v_center
             ok_b, order = is_bound_iter(10, param, dx, dv, ok=ok)
+            plot_core = np.sum(ok_b > 0)
+            if plot_core:
+                dr = np.sqrt(np.sum(dx**2, axis=1))
+                r50 = np.median(dr[ok_b])
 
         # Everything from here on is just plotting nonsense.
         r_max, grid_pts = np.max(h[0,:]["rvir"]), 201
-        r_max_b = np.max(c[i_sub,:]["r50_bound"])
+        r_max_b = 2*np.max(c[i_sub,:]["r50_bound"])
         grid = eval_grid(r_max, [0, 0], grid_pts)
         grid_b = eval_grid(r_max_b, [0, 0], grid_pts)
 
-        vmin, vmax = 2.5, 6.5
-
-        rho_proj = density_2d_proj(x[ok], mp_dm[ok], grid, k=64)
+        rho_proj = density_2d_proj(x[ok], mp_dm[ok], grid, k=K)
         rho_proj = np.log10(np.reshape(rho_proj, (grid_pts, grid_pts)))
-        if c[i_sub,snap]["ok"] and np.sum(ok_b) > 1:
-            rho_proj_b = density_2d_proj(dx[ok_b], mp_dm[ok_b], grid_b, k=64)
+        if plot_core:
+            rho_proj_b = density_2d_proj(dx[ok_b], mp_dm[ok_b], grid_b, k=K)
             rho_proj_b = np.log10(np.reshape(rho_proj_b, (grid_pts, grid_pts)))
         else:
-            rho_proj_b = vmin * np.ones((grid_pts, grid_pts))
+            rho_proj_b = VMIN * np.ones((grid_pts, grid_pts))
 
         ax.cla()
         ax_b.cla()
 
-        ax.imshow(rho_proj, vmin=vmin, vmax=vmax, origin="lower",
+        ax.imshow(rho_proj, vmin=VMIN, vmax=VMAX, origin="lower",
                   cmap="bone", extent=[-r_max, r_max, -r_max, r_max])
         ax.set_xlim((-r_max, r_max))
         ax.set_ylim((-r_max, r_max))
-        ax_b.imshow(rho_proj_b, vmin=vmin, vmax=vmax, origin="lower",
+        ax_b.imshow(rho_proj_b, vmin=VMIN, vmax=VMAX, origin="lower",
                     cmap="bone", extent=[-r_max_b, r_max_b, -r_max_b, r_max_b])
         ax_b.set_xlim((-r_max_b, r_max_b))
         ax_b.set_ylim((-r_max_b, r_max_b))
 
-        if c["ok"][i_sub,snap]:
-            symlib.plot_circle(ax, c["x"][i_sub,snap,0], c["x"][i_sub,snap,1],
-                               c["r50_bound"][i_sub,snap], lw=1.5, c=pc("r"))
-            symlib.plot_circle(ax_b, 0, 0, c["r50_bound"][i_sub,snap],
-                               lw=1.5, c=pc("r"))
-            dx_core = x_core - c["x"][i_sub,snap]
+        if plot_core:
+            ls = "-" if c["ok"][i_sub,snap] else "--"
+            symlib.plot_circle(ax, x_center[0], x_center[1],
+                               r50, lw=1.5, c=pc("r"), ls=ls)
+            symlib.plot_circle(ax_b, 0, 0, r50,
+                               lw=1.5, c=pc("r"), ls=ls)
+            dx_core = x_core - x_center
             ax_b.plot(dx_core[:10,0], dx_core[:10,1], ".", alpha=0.5, c=pc("r"))
-            if h["ok"][i_sub,snap]:
-                dx_h = h["x"][i_sub,snap] - c["x"][i_sub,snap]
+            dx_host = h["x"][0,snap] - x_center
+            symlib.plot_circle(ax_b, dx_host[0], dx_host[1], h["rvir"][0,snap],
+                               lw=3, c="w")
+
+        if h["ok"][i_sub,snap]:
+            if plot_core:
+                dx_h = h["x"][i_sub,snap] - x_center
                 symlib.plot_circle(ax_b, dx_h[0], dx_h[1], h["rvir"][i_sub,snap],
                                    lw=1.5, c=pc("b"))
-        if h["ok"][i_sub,snap]:
             symlib.plot_circle(ax, h["x"][i_sub,snap,0], h["x"][i_sub,snap,1],
                                h["rvir"][i_sub,snap], lw=1.5, c=pc("b"))
 
         ax.plot(x_core[:10,0], x_core[:10,1], ".", alpha=0.5, c=pc("r"))
         symlib.plot_circle(ax, 0, 0, h["rvir"][0,snap], lw=3, c="w")
 
+        ax.set_xlabel(r"$X\ ({\rm kpc})$")
+        ax.set_ylabel(r"$Y\ ({\rm kpc})$")
+        ax_b.set_xlabel(r"$X\ ({\rm kpc})$")
+        ax_b.set_ylabel(r"$Y\ ({\rm kpc})$")
+        ax.set_title(r"$a(t) = %.3f$" % scale[snap])
+        ax_b.set_title(r"$a_{\rm infall} = %.3f$" %
+                       scale[hist["first_infall_snap"][i_sub]])
+
         fig.savefig(path.join(out_dir, "frame_%03d.png" % frame_idx))
         frame_idx += 1
 
+        
 def calc_r_half(dx, mp):
     r = np.sqrt(np.sum(dx**2, axis=1))
     r_min, r_max = max(np.min(r), 0.1), np.max(r)
