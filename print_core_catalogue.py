@@ -9,6 +9,10 @@ from colossus.halo import mass_so
 import subfind
 import os
 import sys
+import gravitree
+
+SUBFIND_K = 64
+VOTING_NP = 32
 
 def get_sim_dirs(config_name):
     with open(config_name, "r") as fp: text = fp.read()
@@ -42,26 +46,46 @@ def calculate_min_snap(prev_file_names):
     # redo the last one we found.
     return int(np.max(snaps))
 
+def parse_flags(flags):
+    out = { }
+    for flag in flags:
+        if len(flag) < 3 or flag[:2] != "--": continue
+        tok = flag[2:].split("=")
+        if len(tok) == 1:
+            out[tok[0]] = ""
+        else:
+            out[tok[0]] = tok[1]
+    return out
+
 def main():
     config_name, idx_str = sys.argv[1], sys.argv[2]
     target_idx = int(idx_str)
-    sim_dirs = get_sim_dirs(config_name)
 
-    if len(sys.argv) == 4:
-        if sys.argv[3] == "--reset":
-            reset_files = True
-        else:
-            raise ValueError("Unrecognized flag, '%s'" % sys.argv[3])
+    flags = parse_flags(sys.argv[3:])
+    n_halo = len(np.loadtxt(config_name, dtype=str))
+
+    for i in range(n_halo):
+        if target_idx == -1 or i == target_idx:
+            print_halo(config_name, i, flags)
+
+def print_halo(config_name, target_idx, flags):
+    if "reset" in flags:
+        reset_files = True
     else:
         reset_files = False
 
     if target_idx == -1:
         raise ValueError("Must target a single halo.")
 
+    sim_dirs = get_sim_dirs(config_name)
     sim_dir = sim_dirs[target_idx]
     if sim_dir[-1] == "/": sim_dir = sim_dir[:-1]
 
-    out_file_fmt = path.join(sim_dir, "halos", "core.%d.txt")
+    if "suffix" in flags:
+        out_file_fmt = path.join(sim_dir, "halos", "core_%s.%%d.txt" %
+                                 flags["suffix"])
+    else:
+        out_file_fmt = path.join(sim_dir, "halos", "core.%d.txt")
     prev_file_names = get_matching_file_names(out_file_fmt)
 
     if reset_files:
@@ -84,7 +108,6 @@ def main():
 
     targets = np.arange(1, len(h), dtype=int)
     
-    n_core = 32
     tracks = [None]*len(h)
 
     if reset_files:
@@ -106,10 +129,20 @@ def main():
 # 10 - R_95,bound (pkpc)
 # 11 - M_tidal (Msun)
 # 12 - M_tidal,bound (Msun)
-# 13 - M_bound (msun)""", file=fp)
+# 13 - M_bound (msun)
+# 14 - Vmax (km/s)
+# 15 - f_core,64
+# 16 - f_core,64,rs
+# 17 - d_core,mbp (pkpc)""", file=fp)
 
-    for snap in range(np.min(starting_snap[targets]), max_snap + 1):
+    start_snap = np.min(starting_snap[targets])
+    end_snap = max_snap
+    if "snap_range" in flags:
+        low, high = flags["snap_range"].split(":")
+        start_snap = max(start_snap, int(low))
+        end_snap = min(end_snap, int(high))
 
+    for snap in range(start_snap, end_snap + 1):
         print(snap)
 
         sd = sh.SnapshotData(info, sim_dir, snap, scale[snap], h_cmov, param,
@@ -117,6 +150,10 @@ def main():
         prof = sh.MassProfile(sd.param, snap, h, sd.x, sd.owner, sd.valid)
         
         for j in range(len(targets)):
+            if j < 10:
+                print("SKIPPING", j)
+                continue
+
             i_sub = targets[j]
             if snap < starting_snap[i_sub]: continue
             if hist["false_selection"][i_sub]: continue
@@ -125,9 +162,10 @@ def main():
 
             if tracks[i_sub] is None:
                 tracks[i_sub] = sh.SubhaloTrack(
-                    i_sub, sd, sd.infall_cores[i_sub], param)
+                    i_sub, sd, sd.infall_cores[i_sub][:VOTING_NP],
+                    param, SUBFIND_K)
             else:
-                tracks[i_sub].next_snap(sd, sd.infall_cores[i_sub])
+                tracks[i_sub].next_snap(sd, sd.infall_cores[i_sub][:VOTING_NP])
                 
             xp, vp = sd.x[i_sub], sd.v[i_sub]
             mp = np.ones(len(xp))*sd.mp
@@ -138,27 +176,38 @@ def main():
             dxp, dvp = sh.delta(xp, xc), sh.delta(vp, vc)
             ok, valid = sd.ok[i_sub], sd.valid[i_sub]
 
-            bound_only=True
             r_tidal, m_tidal = prof.tidal_radius(
-                xc, xp[valid], vc, vp[valid], bound_only=False)            
+                xc, xp[valid], vc, vp[valid], bound_only=True)
 
-            is_bound,_ = sh.is_bound_iter(10, sd.param, dxp, dvp, ok=valid)
-            m_bound = np.sum(mp[is_bound])
+            is_bound = gravitree.binding_energy(
+                dxp[valid], dvp[valid], sd.mp, sd.eps, n_iter=10) < 0
             
-            r = np.sqrt(np.sum(dxp**2, axis=1))
+            m_bound = np.sum(is_bound)*sd.mp
+            
+            r = np.sqrt(np.sum(dxp[valid]**2, axis=1))
             if np.sum(is_bound) > 2:
                 r_50_bound = np.quantile(r[is_bound], 0.5)
                 r_95_bound = np.quantile(r[is_bound], 0.95)
+                _, vmax = symlib.rmax_vmax(param, dxp, is_bound)
             else:
                 r_50_bound, r_95_bound = 0, 0
+                vmax = 0
 
             m_tidal_bound = np.sum(mp[(r < r_tidal) & is_bound])
-            
+
+            dxh = dxp + xc - h[i_sub,snap]["x"]
+            cores = sd.infall_cores[i_sub]
+            r_core = np.sqrt(np.sum(dxp[cores]**2, axis=1))
+            r_rs = np.sqrt(np.sum(dxh[cores]**2, axis=1))
+
+            f_core_32 = np.sum(r_core < r_50_bound)/32
+            f_core_32_rs = np.sum(r_rs < h[i_sub,snap]["rvir"]/3)/32
+
             with open(out_file, "a") as fp:
-                print(("%d %d "+"%.4f "*3+"%.4f "*3+"%.4f "*3+"%.4g "*3) %
+                print(("%d %d "+"%.6f "*3+"%.6f "*3+"%.6f "*3+"%.6g "*3+"%.6g "+"%.6f "+"%.6f "+"%6.f") %
                       (snap, i_sub, xc[0], xc[1], xc[2], vc[0], vc[1], vc[2],
                        r_tidal, r_50_bound, r_95_bound,
-                       m_tidal, m_tidal_bound, m_bound), file=fp)
-
+                       m_tidal, m_tidal_bound, m_bound,
+                       vmax, f_core_32, f_core_32_rs, r_core[0]), file=fp)
         
 if __name__ == "__main__": main()

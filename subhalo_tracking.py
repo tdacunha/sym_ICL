@@ -8,6 +8,7 @@ from colossus.halo import mass_so
 import os.path as path
 import scipy.signal as signal
 import scipy.interpolate as interpolate
+import gravitree
 
 def delta(x, x0):
     dx = np.zeros(x.shape)
@@ -23,16 +24,19 @@ def n_most_bound(xc, vc, x, v, ok, n_core, param):
         return np.ones(n_core)*-1
 
     dx, dv = delta(x, xc), delta(v, vc)
-
-    ke = 0.5*np.sum(dv**2, axis=1)
-    _, vmax, pe_scaled, _ = symlib.profile_info(param, dx, ok=ok)
-    E = ke + pe_scaled*vmax**2
     
-    order = np.argsort(E[ok])
-    orig_idx = np.arange(len(x), dtype=int)[ok][order]
-    
-    return orig_idx[:n_core]
+    mp, eps = param["mp"]/param["h100"], param["eps"]/param["h100"]
+    # We need to do exactly one unbinding pass here because we're only using
+    # smoothly accreted particles.
+    E_ok = gravitree.binding_energy(dx[ok], dv[ok], mp, eps, n_iter=1)
+    E = np.inf*np.ones(len(ok))
+    E[ok] = E_ok
 
+    part = np.argpartition(E, n_core)[:n_core]
+    part_order = np.argsort(E[part])
+    return part[part_order]
+
+"""
 def is_bound(param, dx, dv, ok=None, order=None):
     rmax, vmax, pe, order = symlib.profile_info(param, dx, ok, order)
     pe *= vmax**2
@@ -53,6 +57,7 @@ def is_bound_iter(n_iter, param, dx, dv, ok=None, order=None):
         if n_bound_i == n_bound: break
         
     return ok, order
+"""
 
 def rockstar_cores(snap_info, h, sub_idxs, n_core):
     core_idxs = np.ones((len(h), n_core), dtype=int)*-1
@@ -63,12 +68,12 @@ def rockstar_cores(snap_info, h, sub_idxs, n_core):
     for i_sub in sub_idxs:
         x, v = snap_info.x[i_sub], snap_info.v[i_sub]
         valid, owner =  snap_info.valid[i_sub], snap_info.owner[i_sub]
+        # Note: we aren't actually unbinding the whole halo, just findng the
+        # most bound of the smoothly accreted particles.
         ok = valid & (owner == 0)
         
         xc, vc = h["x"][i_sub,snap], h["v"][i_sub,snap]
         core_idxs[i_sub,:] = n_most_bound(xc, vc, x, v, ok, n_core, param)
-
-        r = distance(x, xc)
         
     return core_idxs
 
@@ -93,6 +98,7 @@ class SnapshotData(object):
 
         self.ok = [None]*len(self.x)
         
+        # Center on the host halo, not the subhalo itself.
         for i in range(len(self.x)):
             self.x[i] = symlib.set_units_x(self.x[i], h_cmov[0,snap], a, param)
             self.v[i] = symlib.set_units_v(self.v[i], h_cmov[0,snap], a, param)
@@ -103,7 +109,7 @@ class SnapshotData(object):
         self.param = param
 
 class SubhaloTrack(object):
-    def __init__(self, i_sub, snap_data_init, core, param):
+    def __init__(self, i_sub, snap_data_init, core, param, k):
         x, v = snap_data_init.x[i_sub], snap_data_init.v[i_sub]
         
         self.i_sub = i_sub
@@ -117,6 +123,7 @@ class SubhaloTrack(object):
         self.x = np.ones((n_snap, 3))*np.nan
         self.v = np.ones((n_snap, 3))*np.nan
         self.param = param
+        self.k = k
 
         self._set_xv(snap_data_init, core)
         
@@ -133,7 +140,8 @@ class SubhaloTrack(object):
         
         ok = valid & (owner == 0)
 
-        x_sf, v_sf, rho_sf, owner_sf, peak_n = subfind.subfind(x[ok], v[ok], mp)
+        x_sf, v_sf, rho_sf, owner_sf, peak_n = subfind.subfind(
+            x[ok], v[ok], mp, k=self.k)
         owner_all = np.ones(len(x), dtype=int)*-1
         owner_all[ok] = owner_sf
 
@@ -143,9 +151,10 @@ class SubhaloTrack(object):
         i_owner = np.argmax(np.bincount(owner_votes))
         xc_sf, vc_sf = x_sf[i_owner], v_sf[i_owner]
 
-        core_sf = n_most_bound(xc_sf, vc_sf, x, v, ok, self.n_core, self.param)
+        # This isn't used any more and will just slow us down.
+        #core_sf = n_most_bound(xc_sf, vc_sf, x, v, ok, self.n_core, self.param)
         
-        self.cores[snap] = core_sf
+        self.cores[snap] = prev_core
         self.x[snap] = xc_sf
         self.v[snap] = vc_sf   
         
@@ -194,8 +203,8 @@ class MassProfile(object):
         )
 
         self.param = param
-        self.mp = param["mp"]
-        self.eps = param["eps"]
+        self.mp = param["mp"]/param["h100"]
+        self.eps = param["eps"]/param["h100"]
 
     def m(self, r):
         return 10**self._m_interp(np.log10(r))
@@ -264,18 +273,22 @@ class MassProfile(object):
         m = len(dr)*self.mp
         conv_limit = 0.001
         
+        mp, eps = self.mp, self.eps
+
         while True:
             r_tidal = self._tidal_radius_iter(m, dx_core, dv_core,
                                               method=method)
             ok = dr < r_tidal
             n_tidal = np.sum(ok)
             if bound_only:
-                is_bound = is_bound_iter(5, self.param, dx, dv,
-                                         ok=ok, order=order)
+                is_bound = np.zeros(len(ok), dtype=bool)
+                is_bound_ok = gravitree.binding_energy(
+                    dx[ok], dv[ok], mp, eps, n_iter=2)
+                is_bound[ok] = is_bound_ok
             else:
                 is_bound = ok
                 
-            m_tidal = np.sum(is_bound)*self.param["mp"]
+            m_tidal = np.sum(is_bound)*mp
 
             if m_tidal == 0:
                 return 0.0, 0.0

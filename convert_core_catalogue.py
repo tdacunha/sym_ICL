@@ -24,8 +24,21 @@ def get_matching_file_names(file_fmt):
         if not path.exists(file_name): return file_names
         file_names.append(file_name)
 
+def parse_flags(flags):
+    out = { }
+    for flag in flags:
+        if len(flag) < 3 or flag[:2] != "--": continue
+        tok = flag[2:].split("=")
+        if len(tok) == 1:
+            out[tok[0]] = ""
+        else:
+            out[tok[0]] = tok[1]
+    return out
+
 def main():
     config_name, idx_str = sys.argv[1], sys.argv[2]
+    flags = parse_flags(sys.argv[3:])
+
     target_idx = int(idx_str)
     sim_dirs = get_sim_dirs(config_name)
 
@@ -36,7 +49,11 @@ def main():
     sim_dir = sim_dirs[target_idx]
     if sim_dir[-1] == "/": sim_dir = sim_dir[:-1]
     
-    file_fmt = path.join(sim_dir, "halos", "core.%d.txt")
+    if "suffix" not in flags:
+        file_fmt = path.join(sim_dir, "halos", "core.%d.txt")
+    else:
+        file_fmt = path.join(sim_dir, "halos", "core_%s.%%d.txt" %
+                             flags["suffix"])
     file_names = get_matching_file_names(file_fmt)
 
     base_dir, suite_name, halo_name = parse_sim_dir(sim_dir)
@@ -54,7 +71,8 @@ def main():
         x, v = cols[2:5].T, cols[5:8].T
         r_tidal, r50_bound, r95_bound = cols[8:11]
         m_tidal, m_tidal_bound, m_bound = cols[11:14]
-        
+        vmax, f_core, f_core_rs, d_core_mbp = cols[14:18]
+
         for i in range(len(subs)):
             sub, snap = subs[i], snaps[i]
             out[sub,snap]["x"], out[sub,snap]["v"] = x[i], v[i]
@@ -65,8 +83,18 @@ def main():
             out[sub,snap]["m_tidal"] = m_tidal[i]
             out[sub,snap]["m_tidal_bound"] = m_tidal_bound[i]
             out[sub,snap]["m_bound"] = m_bound[i]
+            out[sub,snap]["vmax"] = vmax[i]
+            out[sub,snap]["f_core"] = f_core[i]
+            out[sub,snap]["f_core_rs"] = f_core_rs[i]
+            out[sub,snap]["d_core_mbp"] = d_core_mbp[i]
 
-    out_file_name = path.join(sim_dir, "halos", "cores.dat")
+    if "suffix" not in flags:
+        file_root = "cores.dat"
+    else:
+        file_root = "cores_%s.dat"
+        
+    file_root = "cores.dat" if "suffix" not in flags else cores_%s.dat % 
+    out_file_name = path.join(sim_dir, "halos", file_root)
     out.reshape(out.shape[0]*out.shape[1])
     with open(out_file_name, "wb") as fp:
         fp.write(struct.pack("qq", out.shape[0], out.shape[1]))
@@ -78,6 +106,10 @@ def main():
         out["m_tidal"].tofile(fp)
         out["m_tidal_bound"].tofile(fp)
         out["m_bound"].tofile(fp)
+        out["vmax"].tofile(fp)
+        out["f_core"].tofile(fp)
+        out["f_core_rs"].tofile(fp)
+        out["d_core_mbp"].tofile(fp)
 
     c = symlib.read_cores(sim_dir)
 
