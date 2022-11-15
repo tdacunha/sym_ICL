@@ -139,6 +139,7 @@ func CalcTracks(h *Haloes, centralID int32, maxSnap int32) *Tracks {
 	t := &Tracks{ }
 
 	t.Starts, t.Ends = StartsEnds(h)
+
 	t.N = len(t.Starts)
 	t.MWIdx = FindCentral(h, t, centralID)
 	t.IsReal = IsReal(h, t)
@@ -146,6 +147,7 @@ func CalcTracks(h *Haloes, centralID int32, maxSnap int32) *Tracks {
 	t.IsCentralSub = IsCentralSub(h, t)
 	t.HostIdx, t.HostSnap = FindAllHosts(h, t)	
 	t.TrackIdx = FindTrackIndices(h, t)
+
 	t.IsReverseMerger = IsReverseMerger(h, t)
 	t.IsReverseSub = IsReverseSub(h, t)
 	t.IsValidHost = IsValidHost(h, t)
@@ -212,6 +214,7 @@ func IsCentralSub(h *Haloes, t *Tracks) []bool {
 	out := make([]bool, t.N)
 	for i := range out {
 		start, end := t.Starts[i], t.Ends[i]
+
 		for j := start; j < end; j++ {
 			if h.UPID[j] != -1 {
 				k := h.IDTable.Find(h.UPID[j])
@@ -383,9 +386,11 @@ func PreprocessSnap(h *Haloes, t *Tracks) []int32 {
 	for i := range out { out[i] = -1 }
 	for i := range out {
 		for j := range t.HostSnap[i] {
+			k := t.TrackIdx[i][j]
 			if !t.IsValidHost[i][j] && t.TrackIdx[i][j] != int32(t.MWIdx) {
 				continue }
-			if out[i] == -1 || out[i] > t.HostSnap[i][j] {
+			if out[i] == -1 || out[i] > t.HostSnap[i][j] && 
+				t.Mpeak[k] > t.Mpeak[i] {
 				out[i] = t.HostSnap[i][j]
 			}
 		}
