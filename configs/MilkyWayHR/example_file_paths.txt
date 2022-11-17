@@ -1,0 +1,2 @@
+/sdf/group/kipac/u/ollienad/MW_zoomins/Halo023/output_16K/snapshot_231.10
+/sdf/group/kipac/u/ollienad/MW_zoomins/Halo023/output_16K/rockstar/trees/

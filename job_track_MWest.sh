@@ -1,15 +1,15 @@
 #!/bin/bash
 
-#SBATCH --array=0-44
+#SBATCH --array=0-24
 #SBATCH --time=48:00:00
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
 #SBATCH --mem-per-cpu=8G
-#SBATCH --output=/scratch/phil1/logs/SymphonyMilkyWay/log_%A_%a.out
-#SBATCH --error=/scratch/phil1/logs/SymphonyMilkyWay/log_%A_%a.err
+#SBATCH --output=/scratch/phil1/logs/MWest/log_%A_%a.out
+#SBATCH --error=/scratch/phil1/logs/MWest/log_%A_%a.err
 #SBATCH -p kipac
 
-config=configs/MilkyWay/config.txt
+config=configs/MWest/config.txt
 suffix=fid
 snap_range=0:235
 

@@ -19,17 +19,18 @@ halo_snaps = [235]*len(halo_ids)
 # Use one string printf verb for the halo name, then two int printf verbs, one
 # for the snapshot and the other for the index. Use double %% instead of single
 # % for the ints and a single % for the halo name.
-snapshot_format = "/oak/stanford/orgs/kipac/users/ycwang19/ZEUS/MWmass_new/%s/output/snapshot_%%03d.%%d"
+snapshot_format = "/sdf/group/kipac/u/ollienad/MW_zoomins/%s/output/snapshot_%%03d.%%d"
 # Change this to the directory which contains the consistent trees text files.
 # Use a string printf verb for the halo name with a single %.
-tree_dir = "/oak/stanford/orgs/kipac/users/ycwang19/ZEUS/MWmass_new/%s/output/rockstar/trees/"
+tree_dir = "/sdf/group/kipac/u/ollienad/MW_zoomins/%s/output/rockstar/trees/"
 # Directory where the output data products will go. Use a string printf verb
 # for the halo name with a single %.
-data_product_dir = "/oak/stanford/orgs/kipac/users/phil1/simulations/ZoomIns/SymphonyMilkyWay/%s/"
+data_product_dir = "/sdf/group/kipac/g/cosmo/ki21/phil1/simulations/ZoomIns/SymphonyMilkyWay/%s/"
 
-fmt_string = "%%d %%d %s %s %d %s %s %s" % (eps, mp, num_snapshot_files, 
-                                            snapshot_format, tree_dir,
-                                            data_product_dir)
+tree_style = "ct_rvmax"
+fmt_string = "%%d %%d %s %s %d %s %s %s %s" % (eps, mp, num_snapshot_files, 
+                                               snapshot_format, tree_dir,
+                                               data_product_dir, tree_style)
 
 for i in range(len(haloes)):
     h = haloes[i]

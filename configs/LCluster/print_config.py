@@ -1,3 +1,5 @@
+import os.path as path
+
 # Change to the z=0 Plummer-equivalent force softneing scale of the simulation
 # in units of Mpc/h
 eps = "0.0012"
@@ -21,12 +23,13 @@ halo_snaps = [199]*len(halo_ids)
 # for the snapshot and the other for the index. Use double %% instead of single
 # % for the ints and a single % for the halo name.
 snapshot_format = "/sdf/group/kipac/u/ollienad/L-Cluster_zoomins/%s/cdm_output/snapshot_%%03d.%%d"
+snapshot_format_2 = "/sdf/group/kipac/u/ollienad/L-Cluster_zoomins/%s/cdm_output/snaps/snapshot_%%03d.%%d"
 # Change this to the directory which contains the consistent trees text files.
 # Use a string printf verb for the halo name with a single %.
 tree_dir = "/sdf/group/kipac/u/ollienad/L-Cluster_zoomins/%s/cdm_output/rockstar_rvmax/trees"
 # Directory where the output data products will go. Use a string printf verb
 # for the halo name with a single %.
-data_product_dir = "/sdf/group/kipac/g/cosmo/ki21/phil1/simulations/ZoomIns/LCluster/%s/"
+data_product_dir = "/sdf/group/kipac/g/cosmo/ki21/phil1/simulations/ZoomIns/SymphonyLCluster/%s/"
 
 tree_style = "ct_rvmax"
 
@@ -36,7 +39,16 @@ fmt_string = "%%d %%d %s %s %d %s %s %s %s" % (
     data_product_dir, tree_style
 )
 
+fmt_string_2 = "%%d %%d %s %s %d %s %s %s %s" % (
+    eps, mp, num_snapshot_files, 
+    snapshot_format_2, tree_dir,
+    data_product_dir, tree_style
+)
+
 for i in range(len(haloes)):
     h = haloes[i]
     #print(fmt_string)
-    print(fmt_string % (halo_ids[i], halo_snaps[i], h, h, h))
+    if path.exists((snapshot_format % h) % (0, 0)):
+        print(fmt_string % (halo_ids[i], halo_snaps[i], h, h, h))
+    else:
+        print(fmt_string_2 % (halo_ids[i], halo_snaps[i], h, h, h))

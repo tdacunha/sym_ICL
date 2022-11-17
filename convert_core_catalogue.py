@@ -62,14 +62,14 @@ def main():
 
     out = np.ones(h.shape, dtype=symlib.CORE_DTYPE)
     out["x"], out["v"] = -1, -1
-    out["r_tidal"], out["r50_bound"], out["r95_bound"] = -1, -1, -1
+    out["r_tidal"], out["r50_bound"], out["r50_bound_rs"] = -1, -1, -1
     out["m_tidal"], out["m_tidal_bound"], out["m_bound"] = -1, -1, -1
 
     for file_name in file_names:
         snaps, subs = np.loadtxt(file_name, dtype=int, usecols=(0,1)).T
         cols = np.loadtxt(file_name).T
         x, v = cols[2:5].T, cols[5:8].T
-        r_tidal, r50_bound, r95_bound = cols[8:11]
+        r_tidal, r50_bound, r50_bound_rs = cols[8:11]
         m_tidal, m_tidal_bound, m_bound = cols[11:14]
         vmax, f_core, f_core_rs, d_core_mbp = cols[14:18]
 
@@ -79,7 +79,7 @@ def main():
             out[sub,snap]["r_tidal"] = r_tidal[i]
             out[sub,snap]["m_tidal"] = m_tidal[i]
             out[sub,snap]["r50_bound"] = r50_bound[i]
-            out[sub,snap]["r95_bound"] = r95_bound[i]
+            out[sub,snap]["r50_bound_rs"] = r50_bound_rs[i]
             out[sub,snap]["m_tidal"] = m_tidal[i]
             out[sub,snap]["m_tidal_bound"] = m_tidal_bound[i]
             out[sub,snap]["m_bound"] = m_bound[i]
@@ -93,7 +93,8 @@ def main():
     else:
         file_root = "cores_%s.dat"
         
-    file_root = "cores.dat" if "suffix" not in flags else cores_%s.dat % 
+    file_root = ("cores.dat" if "suffix" not in flags else
+                 "cores_%s.dat" % flags["suffix"])
     out_file_name = path.join(sim_dir, "halos", file_root)
     out.reshape(out.shape[0]*out.shape[1])
     with open(out_file_name, "wb") as fp:
@@ -102,7 +103,7 @@ def main():
         out["v"].tofile(fp)
         out["r_tidal"].tofile(fp)
         out["r50_bound"].tofile(fp)
-        out["r95_bound"].tofile(fp)
+        out["r50_bound_rs"].tofile(fp)
         out["m_tidal"].tofile(fp)
         out["m_tidal_bound"].tofile(fp)
         out["m_bound"].tofile(fp)
@@ -111,6 +112,10 @@ def main():
         out["f_core_rs"].tofile(fp)
         out["d_core_mbp"].tofile(fp)
 
-    c = symlib.read_cores(sim_dir)
+        
+    if "suffix" in flags:
+        c = symlib.read_cores(sim_dir, suffix=flags["suffix"])
+    else:
+        c = symlib.read_cores(sim_dir)
 
 if __name__ == "__main__": main()
