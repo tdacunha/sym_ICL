@@ -1,0 +1,5 @@
+19G	/sdf/group/kipac/u/ollienad/MW_zoomins/Halo023/output_16K/rockstar/trees/
+18G	/sdf/group/kipac/u/ollienad/MW_zoomins/Halo247/output_16K/rockstar/trees/
+20G	/sdf/group/kipac/u/ollienad/MW_zoomins/Halo268/output_16K/rockstar/trees/
+21G	/sdf/group/kipac/u/ollienad/MW_zoomins/Halo530/output_16K/rockstar/trees/
+17G	/sdf/group/kipac/u/ollienad/MW_zoomins/Halo829/output_16K/rockstar/trees/

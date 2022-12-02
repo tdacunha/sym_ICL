@@ -11,7 +11,7 @@ import os
 import sys
 import gravitree
 
-SUBFIND_K = 64
+SUBFIND_K = 16
 VOTING_NP = 32
 
 def get_sim_dirs(config_name):
@@ -126,13 +126,13 @@ def print_halo(config_name, target_idx, flags):
 # 5-7 - v (km/s)
 # 8 - R_tidal (pkpc)
 # 9 - R_50,bound (pkpc)
-# 10 - R_95,bound (pkpc)
+# 10 - R_50,bound,Rockstar (pkpc)
 # 11 - M_tidal (Msun)
 # 12 - M_tidal,bound (Msun)
 # 13 - M_bound (msun)
 # 14 - Vmax (km/s)
-# 15 - f_core,64
-# 16 - f_core,64,rs
+# 15 - f_core,32
+# 16 - f_core,32,rs
 # 17 - d_core,mbp (pkpc)""", file=fp)
 
     start_snap = np.min(starting_snap[targets])
@@ -150,10 +150,6 @@ def print_halo(config_name, target_idx, flags):
         prof = sh.MassProfile(sd.param, snap, h, sd.x, sd.owner, sd.valid)
         
         for j in range(len(targets)):
-            if j < 10:
-                print("SKIPPING", j)
-                continue
-
             i_sub = targets[j]
             if snap < starting_snap[i_sub]: continue
             if hist["false_selection"][i_sub]: continue
@@ -187,26 +183,37 @@ def print_halo(config_name, target_idx, flags):
             r = np.sqrt(np.sum(dxp[valid]**2, axis=1))
             if np.sum(is_bound) > 2:
                 r_50_bound = np.quantile(r[is_bound], 0.5)
-                r_95_bound = np.quantile(r[is_bound], 0.95)
-                _, vmax = symlib.rmax_vmax(param, dxp, is_bound)
+                _, vmax = symlib.rmax_vmax(param, dxp[valid], is_bound)
             else:
-                r_50_bound, r_95_bound = 0, 0
-                vmax = 0
+                r_50_bound = 0.0
+                vmax = 0.0
 
-            m_tidal_bound = np.sum(mp[(r < r_tidal) & is_bound])
+            m_tidal_bound = np.sum((r < r_tidal) & is_bound)*sd.mp
 
             dxh = dxp + xc - h[i_sub,snap]["x"]
+            if h["ok"][i_sub,snap]:
+                dvh = dvp + vc - h[i_sub,snap]["v"]
+                is_bound_h = gravitree.binding_energy(
+                    dxh[valid], dvh[valid], sd.mp, sd.eps, n_iter=10) < 0
+                rh = np.sqrt(np.sum(dxh[valid]**2, axis=1))
+                if np.sum(is_bound_h) > 2:
+                    r_50_bound_h = np.quantile(rh[is_bound_h], 0.5)
+                else:
+                    r_50_bound_h = 0.0
+            else:
+                r_50_bound_h = 0.0
+            
             cores = sd.infall_cores[i_sub]
             r_core = np.sqrt(np.sum(dxp[cores]**2, axis=1))
-            r_rs = np.sqrt(np.sum(dxh[cores]**2, axis=1))
+            r_h = np.sqrt(np.sum(dxh[cores]**2, axis=1))
 
             f_core_32 = np.sum(r_core < r_50_bound)/32
-            f_core_32_rs = np.sum(r_rs < h[i_sub,snap]["rvir"]/3)/32
+            f_core_32_rs = np.sum(r_h < r_50_bound_h)/32
 
             with open(out_file, "a") as fp:
                 print(("%d %d "+"%.6f "*3+"%.6f "*3+"%.6f "*3+"%.6g "*3+"%.6g "+"%.6f "+"%.6f "+"%6.f") %
                       (snap, i_sub, xc[0], xc[1], xc[2], vc[0], vc[1], vc[2],
-                       r_tidal, r_50_bound, r_95_bound,
+                       r_tidal, r_50_bound, r_50_bound_h,
                        m_tidal, m_tidal_bound, m_bound,
                        vmax, f_core_32, f_core_32_rs, r_core[0]), file=fp)
         

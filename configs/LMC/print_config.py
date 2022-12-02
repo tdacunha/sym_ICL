@@ -26,7 +26,7 @@ snapshot_format = "/sdf/group/kipac/u/ollienad/LMC_zoomins/%s/output/snapshot_%%
 tree_dir = "/sdf/group/kipac/u/ollienad/LMC_zoomins/%s/output/rockstar/trees"
 # Directory where the output data products will go. Use a string printf verb
 # for the halo name with a single %.
-data_product_dir = "/sdf/group/kipac/g/cosmo/ki21/phil1/simulations/ZoomIns/LMC/%s/"
+data_product_dir = "/sdf/group/kipac/g/cosmo/ki21/phil1/simulations/ZoomIns/SymphonyLMC/%s/"
 
 tree_style = "ct_rvmax"
 
