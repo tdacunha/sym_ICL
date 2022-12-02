@@ -7,14 +7,23 @@ import os.path as path
 from colossus.cosmology import cosmology
 import read_mw_sats
 
-invalid_hosts = [6, 9, 10, 16, 17, 31, 36, 37, 40, 42, 43]
+#invalid_hosts = [36]
+invalid_hosts = []
 
-def plot_mass_loss():
-    palette.configure(False)
+USE_TEX = True
 
-    out_dir = "../plots/core_tests/mass_loss"
-    base_dir = "../tmp_data"
-    suite = "SymphonyMilkyWay"
+SUITE = "SymphonyMilkyWay"
+OUT_DIR = "../plots/core_plots/MilkyWay"
+invalid_hosts = []
+#SUITE = "SymphonyMilkyWay"
+#OUT_DIR = "../plots/core_plots/MilkyWay"
+#invalid_hosts = []
+
+def plot_mass_loss_old():
+    palette.configure(USE_TEX)
+
+    out_dir = OUT_DIR
+    suite = SUITE
     sim_dir = symlib.get_host_directory(base_dir, suite, 0)
 
     param = symlib.simulation_parameters(suite)
@@ -29,7 +38,67 @@ def plot_mass_loss():
     fig, ax = plt.subplots(2, figsize=(7, 14), sharex=True)
     
     for i_sub in targets:
-        print(i_sub)
+        ax[0].cla()
+        ax[1].cla()
+
+        ax[0].plot(a, h["mvir"][0], "--", c="k")
+        
+        okh, mvir = h["ok"][i_sub], h["mvir"][i_sub]
+        rh = np.sqrt(np.sum(h["x"][i_sub]**2, axis=1))
+    
+        ax[0].plot(a[okh], mvir[okh], pc("r"), label=r"$M_{\rm vir,RS}$")
+        ax[1].plot(a[okh], rh[okh], pc("r"), label=r"$r_{\rm Rockstar}$")
+        okc = c["ok"][i_sub]
+        m_bound, m_tidal = c["m_bound"][i_sub], c["m_tidal_bound"][i_sub]
+        r_half = c["r50_bound"][i_sub]
+        rc = np.sqrt(np.sum(c["x"][i_sub]**2, axis=1))
+        ax[0].plot(a[okc], m_bound[okc], pc("o"), label=r"$M_{\rm bound}$")
+        ax[0].plot(a[okc], m_tidal[okc], pc("b"), label=r"$M_{\rm tidal}$")
+        ax[1].plot(a[okc], rc[okc], pc("b"), label=r"$r_{\rm core}$")
+        ax[1].plot(a[okh], rh[okh], ":", c=pc("r"))
+        ax[1].plot(a, h[0]["rvir"], "--", c="k")
+        ax[1].plot(a[okc], r_half[okc], "--", c=pc("a"))
+
+        mp = param["mp"]/param["h100"]
+        ax[0].set_ylim(mp, None)
+        ax[0].fill_between([0, 1], [mp]*2, [25*mp]*2, color="k", alpha=0.2)
+        ax[0].set_yscale("log")
+        ax[1].set_yscale("log")
+        ax[1].set_xlim(0, 1)
+        ax[1].set_ylim(np.min(h[0]["rvir"]), None)
+        
+        ax[1].set_xlabel(r"$a(t)$")
+        ax[1].set_ylabel(r"$r\ ({\rm kpc})$")
+        ax[0].set_ylabel(r"$M\ (M_\odot)$")
+
+        ax[0].legend(loc="upper right", fontsize=16)
+        ax[1].legend(loc="lower left", fontsize=16)
+
+        fig.savefig(path.join(out_dir, "ml_%04d.png" % i_sub))
+
+def plot_mass_loss():
+    palette.configure(USE_TEX)
+
+    out_dir = path.join(OUT_DIR, "sub_mass_loss")
+    suite = SUITE
+    base_dir = "/oak/stanford/orgs/kipac/users/phil1/simulations/ZoomIns/"
+    sim_dir = symlib.get_host_directory(base_dir, suite, 0)
+
+    param = symlib.simulation_parameters(suite)
+    a = symlib.scale_factors(sim_dir)
+    
+    h, hist = symlib.read_subhalos(sim_dir)
+    c = symlib.read_cores(sim_dir)
+
+    targets = np.arange(1, len(h), dtype=int)
+
+    # fig, ax = plt.subplots(2, figsize=(7, 14), sharex=True)
+    fig, ax = plt.subplots(figsize=(6,6))
+    
+    for i_sub in targets:
+        if i_sub != 14: continue
+        print("i_sub =", i_sub)
+        """
         ax[0].cla()
         ax[1].cla()
 
@@ -67,95 +136,268 @@ def plot_mass_loss():
         ax[1].legend(loc="lower left", fontsize=16)
 
         fig.savefig(path.join(out_dir, "ml_%04d.png" % i_sub))
+        """
+
+        ax.cla()
+        
+        okh, mvir = h["ok"][i_sub], h["mvir"][i_sub]
+        rh = np.sqrt(np.sum(h["x"][i_sub]**2, axis=1))
+    
+        okc = c["ok"][i_sub]
+        m_bound, m_tidal = c["m_bound"][i_sub], c["m_tidal_bound"][i_sub]
+        r_half = c["r50_bound"][i_sub]
+        rc = np.sqrt(np.sum(c["x"][i_sub]**2, axis=1))
+
+        ax.plot(a[okh], rh[okh], pc("r"), label=r"${\rm Rockstar}$")
+        ax.plot(a[okc], rc[okc], pc("b"), label=r"${\rm Particle-tracking}$")
+        ax.plot(a[okh], rh[okh], ":", c=pc("r"))
+        ax.plot(a, h[0]["rvir"], "--", c="k", label=r"$R_{\rm vir,host}$")
+
+        ax.set_yscale("log")
+        ax.set_xlim(0, 1)
+        ax.set_ylim(np.min(h[0]["rvir"]), None)
+        
+        ax.set_xlabel(r"$a(t)$")
+        ax.set_ylabel(r"$r\ ({\rm kpc})$")
+
+        ax.legend(loc="lower right", fontsize=18)
+
+        fig.savefig(path.join(out_dir, "ml_%04d.pdf" % i_sub))
+
 
 def mass_function():
-    palette.configure(False)
+    print("mass_function_compare")
+    palette.configure(USE_TEX)
 
     base_dir = "/oak/stanford/orgs/kipac/users/phil1/simulations/ZoomIns/"
-    suite = "SymphonyMilkyWay"
 
-    param = symlib.simulation_parameters(suite)
+    fig_main, ax_main = plt.subplots()
+    fig_hr, ax_hr = plt.subplots(figsize=(6,6))
+    fig_c, ax_c = plt.subplots()
+    fig_rs, ax_rs = plt.subplots()
+
+    figs = [fig_main, fig_hr, fig_c, fig_rs]
+    axes = [ax_main, ax_hr, ax_c, ax_rs]
+
+    """
+    radii_mults = [1, 1/2, 1/4, 1/8]
+    radii_labels = [r"$r < R_{\rm vir}$", r"$r < R_{\rm vir}/2$",
+                    r"$r < R_{\rm vir}/4$", r"$r < R_{\rm vir}/8$"]
+    radii_colors = [pc("r"), pc("o"), pc("b"), pc("p")]
+    """
+
+    radii_mults = [1, 1/10]
+    radii_labels = [r"$r < 300\ {\rm kpc}$", r"$r < 30\ {\rm kpc}$"]
+    radii_colors = [pc("r"), pc("b")]
+
+    suites = ["SymphonyMilkyWay", "SymphonyMilkyWayHR", "SymphonyMilkyWayLR"]
     
-    ratios_rs, ratios_core = [], []
-    r_rs, r_core = [], []
-    n_host = 0
+    fig_suites = [[0, 0], [1, 1], [1, 2], [1, 2]]
+    fig_types = [[1, 0], [1, 0], [1, 1], [0, 0]]
+    fig_suffix = ["main", "hr", "c", "rs"]
+    fig_labels = [[r"${\rm Particle-tracking}$", r"${\rm Rockstar}$"],
+                  [r"${\rm Particle-tracking}$", r"${\rm Rockstar}$"],
+                  [r"${\rm High-res}$", r"${\rm Low-res}$"], 
+                  [r"${\rm High-res}$", r"${\rm Low-res}$"]]
 
-    for i_halo in range(symlib.n_hosts(suite)):
-        if i_halo in invalid_hosts:
-            continue
-        print(i_halo)
+    for i_suite in range(len(suites)):
+        suite = suites[i_suite]
+        param = symlib.simulation_parameters(suite)
 
-        sim_dir = symlib.get_host_directory(base_dir, suite, i_halo)
+        cs = [None]*symlib.n_hosts(suite)
+        hs, hists = [None]*len(cs), [None]*len(cs)
 
-        a = symlib.scale_factors(sim_dir)
-        h, hist = symlib.read_subhalos(param, sim_dir)
-        h = symlib.set_units_halos(h, a, param)
-        c = symlib.read_cores(sim_dir)
+        for halo_type in range(2):
+            ratios = []
+            rads = []
+            
+            n_host = 0
+            
+            for i_host in range(symlib.n_hosts(suite)):
 
-        mp = param["mp"]/param["h100"]
+                print("%s: %2d/%2d" % (suite, i_host, symlib.n_hosts(suite) - 1))
 
-        m_vir = h["mvir"][1:,-1]
-        m_peak = np.max(h["mvir"], axis=1)[1:]
-        okh = h["ok"][1:,-1] & (m_vir > 32*mp)
+                sim_dir = symlib.get_host_directory(base_dir, suite, i_host)
+
+                if halo_type == 0:
+                    hs[i_host], hists[i_host] = symlib.read_subhalos(sim_dir)
+                    cs[i_host] = symlib.read_cores(sim_dir)
+                h, hist, c = hs[i_host], hists[i_host], cs[i_host]
+
+                if halo_type == 0:
+                    mvir, x = h["mvir"], h["x"]
+                    ok = rockstar_ok(h, c, param)
+                elif halo_type == 1:
+                    mvir, x, ok = combine_cores_rockstar(h, c, param)
+                else:
+                    assert(0)
+
+                ratio = hist["mpeak"] / h["mvir"][0,-1]
+                r = np.sqrt(np.sum(x[:,-1,:]**2, axis=1)) / h["rvir"][0,-1]
+
+                ok[0,-1] = False
+
+                ratios.append(ratio[ok[:,-1]])
+                rads.append(r[ok[:,-1]])
+                n_host += 1
+
+            r = np.hstack(rads)
+            ratio = np.hstack(ratios)
+
+            for i_fig in range(len(figs)):
+                fig, ax = figs[i_fig], axes[i_fig]
+                suites_to_plot = fig_suites[i_fig]
+                types_to_plot = fig_types[i_fig]
+
+                for i_curve in range(len(suites_to_plot)):
+                    if suites_to_plot[i_curve] != i_suite: continue
+                    if types_to_plot[i_curve] != halo_type: continue
+
+                    for i_mult in range(len(radii_mults)):
+                        ok = r < radii_mults[i_mult]
+
+                        #ls = "-" if i_curve == 0 else "--"
+                        #color = radii_colors[i_mult]
+                        ls = "-" if i_mult == 0 else "--"
+                        color = pc("b") if halo_type == 1 else pc("r")
+
+                        ax.plot(np.sort(ratio[ok]),
+                                np.arange(np.sum(ok))[::-1]/n_host,
+                                ls=ls, c=color)
+
+    for i_fig in range(len(figs)):
+        fig, ax = figs[i_fig], axes[i_fig]
+        suffix = fig_suffix[i_fig]
+
+        #for i_rad in range(len(radii_mults)):
+        #    ax.plot([], [], label=radii_labels[i_rad],
+        #            c=radii_colors[i_rad])
+        #ax.plot([], [], "-", c=pc("a"), label=fig_labels[i_fig][0])
+        #ax.plot([], [], "--", c=pc("a"), label=fig_labels[i_fig][1])
+        ax.plot([], [], c=pc("r"), label=r"${\rm Rockstar}$")
+        ax.plot([], [], c=pc("b"), label=r"${\rm Particle-Tracking}$")
+        ax.plot([], [], "-", c=pc("a"), label=r"$r<300\ {\rm kpc}$")
+        ax.plot([], [], "--", c=pc("a"), label=r"$r<30\ {\rm kpc}$")
+
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+        ax.set_xlim(1e-5, 0.2)
+        ax.set_ylim(1e-1, 2e3)
+        ax.set_xlabel(r"$m=M_{\rm infall,sub}/M_{\rm host}$")
+        ax.set_ylabel(r"$N(>m)$")
+
+        ax.legend(loc="upper right", fontsize=17)
+    
+        fig.savefig(path.join(OUT_DIR, "core_shmf_%s.pdf" % suffix))
+
+def mass_function_resolution():
+    print("mass_function_resolution")
+    palette.configure(USE_TEX)
+
+    base_dir = "/oak/stanford/orgs/kipac/users/phil1/simulations/ZoomIns/"
+
+    fig_vir, ax_vir = plt.subplots()
+    fig_peak, ax_peak = plt.subplots()
+
+    radii_lims = [50, 100, 250]
+    radii_labels = [r"$r < 50\ {\rm kpc}$", r"$r < 100\ {\rm kpc}$",
+                    r"$r < 250\ {\rm kpc}$",]
+    radii_colors = [pc("r"), pc("o"), pc("b")]
+
+    suites = ["SymphonyMilkyWayHR", "SymphonyMilkyWayLR", "SymphonyMilkyWay"]
+    suite_ls = ["-", "--", ":"]
+    
+    for i_suite in range(len(suites)):
+        suite = suites[i_suite]
+        param = symlib.simulation_parameters(suite)
+
+        nvirs_c, npeaks_c, rads_c = [], [], []
+        nvirs_h, npeaks_h, rads_h = [], [], []
+
+        for i_host in range(symlib.n_hosts(suite)):
+
+            print("%s: %2d/%2d" % (suite, i_host, symlib.n_hosts(suite) - 1))
+            sim_dir = symlib.get_host_directory(base_dir, suite, i_host)
+            
+            h, hist = symlib.read_subhalos(sim_dir)
+            c = symlib.read_cores(sim_dir)
+
+            mvir, x, ok = combine_cores_rockstar(h, c, param)
+            r = np.sqrt(np.sum(x[:,-1,:]**2, axis=1))
+            ok[0,-1] = False
+            h["ok"][0,-1] = False
+            ok_h =h["ok"]
+
+            mp = param["mp"] / param["h100"]
+            nvirs_c.append(mvir[ok[:,-1],-1] / mp)
+            npeaks_c.append(hist["mpeak"][ok[:,-1]] / mp)
+            rads_c.append(r[ok[:,-1]])
+            nvirs_h.append(mvir[ok_h[:,-1],-1] / mp)
+            npeaks_h.append(hist["mpeak"][ok_h[:,-1]] / mp)
+            rads_h.append(r[ok_h[:,-1]])
+
+        nvir_c = np.hstack(nvirs_c)
+        npeak_c = np.hstack(npeaks_c)
+        r_c = np.hstack(rads_c)
+        nvir_h = np.hstack(nvirs_h)
+        npeak_h = np.hstack(npeaks_h)
+        r_h = np.hstack(rads_h)
+
+        n_max = max(np.max(npeak_c), np.max(npeak_h))
+        mass_bins = 10**np.linspace(0, np.log10(n_max)*1.01, 100)
         
-        r_h = np.sqrt(np.sum(h["x"][1:,-1]**2, axis=1))
-        r_c = np.sqrt(np.sum(c["x"][1:,-1]**2, axis=1))
-        r_half = c["r50_bound"][1:,-1]
-        m_bound = c["m_bound"][1:,-1]
-        m_tidal = c["m_tidal"][1:,-1]
-        okc = c["ok"][1:,-1] & (m_bound > 32*mp) & (r_c > r_half)
-        m0, r0 = h["mvir"][0,-1], h["rvir"][0,-1]
-        
-        ratios_rs.append(m_peak[okh]/m0)
-        ratios_core.append(m_peak[okc]/m0)
-        r_rs.append(r_h[okh]/r0)
-        r_core.append(r_c[okc]/r0)
-        n_host += 1
+        for i_rad in range(len(radii_lims)):
+            ok_h = r_h < radii_lims[i_rad]
+            ok_c = r_c < radii_lims[i_rad]
 
-    ratios_rs = np.hstack(ratios_rs)
-    ratios_core = np.hstack(ratios_core)
-    r_rs = np.hstack(r_rs)
-    r_core = np.hstack(r_core)
+            N_vir_c, N_edges = np.histogram(nvir_c[ok_c], bins=mass_bins)
+            N_vir_c = np.cumsum(N_vir_c[::-1])[::-1]
+            N_vir_h, _ = np.histogram(nvir_h[ok_h], bins=mass_bins)
+            N_vir_h = np.cumsum(N_vir_h[::-1])[::-1]
+            N_peak_c, _ = np.histogram(npeak_c[ok_c], bins=mass_bins)
+            N_peak_c = np.cumsum(N_peak_c[::-1])[::-1]
+            N_peak_h, _ = np.histogram(npeak_h[ok_h], bins=mass_bins)
+            N_peak_h = np.cumsum(N_peak_h[::-1])[::-1]
 
-    r0_rs, r0_core = r_rs < 1, r_core < 1
-    r1_rs, r1_core = r_rs < 0.25, r_core < 0.25
-    r2_rs, r2_core = r_rs < 0.1, r_core < 0.1
+            N_min = symlib.n_hosts(suite)*1.5
+            N_max = 1e11/mp
+            ok_vir = ((N_vir_c > N_min) & (N_vir_h > N_min) &
+                      (N_edges[:-1] < N_max))
+            ok_peak = ((N_peak_c > N_min) & (N_peak_h > N_min) & 
+                       (N_edges[:-1] < N_max) & (N_edges[:-1] > 300))
 
-    fig, ax = plt.subplots()
-    ax.plot(np.sort(ratios_rs[r0_rs]),
-            np.arange(np.sum(r0_rs))[::-1] / n_host,
-            c=pc("r"))
-    ax.plot(np.sort(ratios_core[r0_core]),
-            np.arange(np.sum(r0_core))[::-1] / n_host, "--",
-            c=pc("r"))
-    ax.plot(np.sort(ratios_rs[r1_rs]),
-            np.arange(np.sum(r1_rs))[::-1] / n_host,
-            c=pc("o"))
-    ax.plot(np.sort(ratios_core[r1_core]),
-            np.arange(np.sum(r1_core))[::-1] / n_host, "--",
-            c=pc("o"))
-    ax.plot(np.sort(ratios_rs[r2_rs]),
-            np.arange(np.sum(r2_rs))[::-1] / n_host,
-            c=pc("b"))
-    ax.plot(np.sort(ratios_core[r2_core]),
-            np.arange(np.sum(r2_core))[::-1] / n_host, "--",
-            c=pc("b"))
-    
-    ax.plot([], [], c=pc("r"), label=r"${\rm <R_{\rm vir}}$")
-    ax.plot([], [], c=pc("o"), label=r"${\rm <R_{\rm vir}/4}$")
-    ax.plot([], [], c=pc("b"), label=r"${\rm <R_{\rm vir}/10}$")
-    ax.plot([], [], c=pc("k"), label=r"${\rm Rockstar}$")
-    ax.plot([], [], "--", c=pc("k"), label=r"${\rm core-tracking}$")
+            N_mids = np.sqrt(N_edges[:-1] * N_edges[1:])
 
-    ax.set_xscale("log")
-    ax.set_yscale("log")
+            c = radii_colors[i_rad]
+            ls = suite_ls[i_suite]
+            ax_vir.plot(N_mids[ok_vir], 1 - N_vir_h[ok_vir]/N_vir_c[ok_vir],
+                        ls=ls, c=c)
+            ax_peak.plot(N_mids[ok_peak],
+                         1 - N_peak_h[ok_peak]/N_peak_c[ok_peak],
+                         ls=ls, c=c)
 
-    ax.set_xlabel(r"$m=M_{\rm peak,sub}/M_{\rm host}$")
-    ax.set_ylabel(r"$N(>m)$")
+    for i_rad in range(len(radii_labels)):
+        ax_vir.plot([], [], c=radii_colors[i_rad], label=radii_labels[i_rad])
+        ax_peak.plot([], [], c=radii_colors[i_rad], label=radii_labels[i_rad])
 
-    ax.legend(loc="upper right", fontsize=17)
-    
-    fig.savefig("../plots/core_plots/core_shmf.png")
+    ax_vir.set_xscale("log")
+    ax_peak.set_xscale("log")
+    ax_vir.set_xlim(30, None)
+    ax_peak.set_xlim(30, None)
+    ax_vir.set_ylim(0, 1)
+    ax_vir.set_ylim(0, 1)
+
+    ax_vir.set_xlabel(r"$N_{\rm vir,sub}$")
+    ax_peak.set_xlabel(r"$N_{\rm peak,sub}$")
+    ax_vir.set_ylabel(r"$f_{\rm missing}$")
+    ax_peak.set_ylabel(r"$f_{\rm missing}$")
+
+    ax_vir.legend(loc="upper left", fontsize=17)
+    ax_peak.legend(loc="upper left", fontsize=17)
+    fig_vir.savefig("../plots/core_plots/f_missing_resolution_vir.png")
+    fig_peak.savefig("../plots/core_plots/f_missing_resolution_peak.png")
+
+
 
 def t_survive(cosmo, a, infall_snap, ok):
     z = 1/a - 1
@@ -169,10 +411,10 @@ def t_survive(cosmo, a, infall_snap, ok):
     return t_last - t_first
 
 def survival_time():
-    palette.configure(False)
+    palette.configure(USE_TEX)
 
     base_dir = "/oak/stanford/orgs/kipac/users/phil1/simulations/ZoomIns/"
-    suite = "SymphonyMilkyWay"
+    suite = SUITE
 
     param = symlib.simulation_parameters(suite)
     mp = param["mp"]/param["h100"]
@@ -193,8 +435,7 @@ def survival_time():
         sim_dir = symlib.get_host_directory(base_dir, suite, i_halo)
 
         a = symlib.scale_factors(sim_dir)
-        h, hist = symlib.read_subhalos(param, sim_dir)
-        h = symlib.set_units_halos(h, a, param)
+        h, hist = symlib.read_subhalos(sim_dir)
         c = symlib.read_cores(sim_dir)
 
         m_vir = h["mvir"][1:,:]
@@ -259,28 +500,46 @@ def survival_time():
 
     ax.grid()
     fig.savefig("../plots/core_plots/t_ratio_hist.png")
+    fig.savefig(path.join(OUT_DIR, "t_ratio_hist.png"))
 
     print(n_merger)
     print(n_disrupt)
 
 def stitching_errors():
-    palette.configure(False)
+    print("stitching_errors")
+    palette.configure(USE_TEX)
 
     base_dir = "/oak/stanford/orgs/kipac/users/phil1/simulations/ZoomIns/"
-    suite = "SymphonyMilkyWay"
+    suite = SUITE
+
+    if suite == "SymphonyMilkyWay":
+        bins = [1e8, 1e9, 1e10, 1e11]
+        colors = [pc("b"), pc("o"), pc("r")]
+        labels = [r"$10^{8} < M_{\rm peak}/M_\odot < 10^{9}$",
+                  r"$10^{9} < M_{\rm peak}/M_\odot < 10^{10}$",
+                  r"$10^{10} < M_{\rm peak}/M_\odot < 10^{11}$"]
+    else:
+        bins = [1e7, 1e8, 1e9, 1e10, 1e11]
+        colors = [pc("p"), pc("b"), pc("o"), pc("r")]
+        labels = [r"$10^{7} < M_{\rm peak}/M_\odot < 10^{8}$",
+                  r"$10^{8} < M_{\rm peak}/M_\odot < 10^{9}$",
+                  r"$10^{9} < M_{\rm peak}/M_\odot < 10^{10}$",
+                  r"$10^{10} < M_{\rm peak}/M_\odot < 10^{11}$"]
+        
+
+    n_mass_bins = len(bins) - 1
 
     param = symlib.simulation_parameters(suite)
     
     n_host = 0
-
     n_bins = 200
     r_bins = np.logspace(-3, 0, n_bins+1)
 
-    N_tot_now = np.zeros(n_bins)
-    N_err_now = np.zeros(n_bins)
+    N_tot_now = [np.zeros(n_bins) for _ in range(n_mass_bins)]
+    N_err_now = [np.zeros(n_bins) for _ in range(n_mass_bins)]
 
-    N_tot_disrupt = np.zeros(n_bins)
-    N_err_disrupt = np.zeros(n_bins)
+    N_tot_disrupt = [np.zeros(n_bins) for _ in range(n_mass_bins)]
+    N_err_disrupt = [np.zeros(n_bins) for _ in range(n_mass_bins)]
 
     for i_halo in range(symlib.n_hosts(suite)):
         if i_halo in invalid_hosts:
@@ -290,8 +549,7 @@ def stitching_errors():
         sim_dir = symlib.get_host_directory(base_dir, suite, i_halo)
 
         a = symlib.scale_factors(sim_dir)
-        h, hist = symlib.read_subhalos(param, sim_dir)
-        h = symlib.set_units_halos(h, a, param)
+        h, hist = symlib.read_subhalos(sim_dir)
         c = symlib.read_cores(sim_dir)
 
         mp = param["mp"]/param["h100"]
@@ -301,90 +559,106 @@ def stitching_errors():
 
         m_vir, m_peak = h["mvir"][:,-1], hist["mpeak"]
 
-        dr_hc = np.sqrt(np.sum((h["x"][:,-1] - c["x"][:,-1])**2, axis=1))
-        r_h = np.sqrt(np.sum(h["x"][:,-1]**2, axis=1))
-        r_c = np.sqrt(np.sum(c["x"][:,-1]**2, axis=1))
-        r_half = c["r50_bound"][:,-1]
-        m_bound = c["m_bound"][:,-1]
-        m_tidal = c["m_tidal"][:,-1]
+        for j in range(n_mass_bins):
+            dr_hc = np.sqrt(np.sum((h["x"][:,-1] - c["x"][:,-1])**2, axis=1))
+            r_h = np.sqrt(np.sum(h["x"][:,-1]**2, axis=1))
+            r_c = np.sqrt(np.sum(c["x"][:,-1]**2, axis=1))
+            r_half = c["r50_bound"][:,-1]
+            m_bound = c["m_bound"][:,-1]
+            m_tidal = c["m_tidal"][:,-1]
+            
+            ok = (h["ok"][:,-1] & (m_vir > 32*mp) &
+                  c["ok"][:,-1] & (m_bound > 32*mp) &
+                  (r_c > r_half) & (m_peak >= bins[j]) & 
+                  (m_peak < bins[j+1]))
+            is_err = dr_hc > r_half
 
-        ok = (h["ok"][:,-1] & (m_vir > 32*mp) &
-              c["ok"][:,-1] & (m_bound > 32*mp) &
-              (r_c > r_half))
-        is_err = dr_hc > r_half
+            ok_tmp = (h["ok"][:,-1] & (m_vir > 32*mp) &
+                      c["ok"][:,-1] & (m_bound > 32*mp) &
+                      (r_c > r_half))
+            if j == 0:
+                print(np.where(ok_tmp & is_err)[0]+1)
 
-        r0 = host["rvir"][-1]
+            test_idx = np.where(is_err)[0]
 
-        n_tot, _ = np.histogram(r_h[ok]/r0, bins=r_bins)
-        n_err, _ = np.histogram(r_h[ok & is_err]/r0, bins=r_bins)
+            r0 = host["rvir"][-1]
+
+            n_tot, _ = np.histogram(r_h[ok]/r0, bins=r_bins)
+            n_err, _ = np.histogram(r_h[ok & is_err]/r0, bins=r_bins)
+
+            N_tot_now[j] += n_tot
+            N_err_now[j] += n_err
+
+            r_peri = np.min(np.sum(h["x"]**2, axis=2), axis=1)
+            r_c = np.sqrt(np.sum(c["x"]**2, axis=2))
+            r_h = np.sqrt(np.sum(h["x"]**2, axis=2))
+            snap = np.arange(h.shape[1])
+
+            ok = (h["ok"] & (h["mvir"] > 32*mp) & 
+                  c["ok"] & (c["m_bound"] > 32*mp) & 
+                  (r_c > c["r50_bound"]))
+            ok[0] = False
+
+            mass_ok = (m_peak >= bins[j]) & (m_peak < bins[j+1])
+
+            last_snap = np.zeros(len(h), dtype=int)
+            rd_hc = np.zeros(len(h))
+            r_half = np.zeros(len(h))
+            rh_last = np.zeros(len(h))
+            for i in range(len(last_snap)):
+                if np.sum(ok[i]) == 0 or h["ok"][i,-1]:
+                    last_snap[i] = -1
+                else:
+                    last_snap[i] = np.max(snap[ok[i]])
+                dr_hc[i] = np.sqrt(np.sum((
+                    h["x"][i,last_snap[i],:] - c["x"][i,last_snap[i],:])**2,
+                                      ))
+                r_half = c["r50_bound"][i,last_snap[i]]
+                rh_last = r_h[i,last_snap[i]]
+
+            is_valid = (last_snap != -1) & mass_ok
+            is_err = r_half < dr_hc
+            r0 = host["rvir"][last_snap]
+            
+            n_tot_disrupt, _ = np.histogram(
+                r_peri[is_valid]/r0[is_valid], bins=r_bins)
+            n_err_disrupt, _ = np.histogram(
+                r_peri[is_valid & is_err]/r0[is_valid & is_err], bins=r_bins)
+            N_tot_disrupt[j] += n_tot_disrupt
+            N_err_disrupt[j] += n_err_disrupt
+
+    N_tot_now = [np.cumsum(N_tot_now[j]) for j in range(n_mass_bins)]
+    N_err_now = [np.cumsum(N_err_now[j]) for j in range(n_mass_bins)]
+    N_tot_disrupt = [np.cumsum(N_tot_disrupt[j]) for j in range(n_mass_bins)]
+    N_err_disrupt = [np.cumsum(N_err_disrupt[j]) for j in range(n_mass_bins)]
+    
+    fig1, ax1 = plt.subplots()
+    fig2, ax2 = plt.subplots()
+
+    for j in range(n_mass_bins):
+        ok_now = N_tot_now[j] > 2
+        ok_disrupt = N_tot_disrupt[j] > 2
+
+        right_bin_now = r_bins[1:][ok_now]
+        right_bin_disrupt = r_bins[1:][ok_disrupt]
         
-        N_tot_now += n_tot
-        N_err_now += n_err
+        f_err_now = N_err_now[j][ok_now]/N_tot_now[j][ok_now]
+        f_err_disrupt = N_err_disrupt[j][ok_disrupt]/N_tot_disrupt[j][ok_disrupt]
 
-        r_peri = np.min(np.sum(h["x"]**2, axis=2), axis=1)
-        r_c = np.sqrt(np.sum(c["x"]**2, axis=2))
-        r_h = np.sqrt(np.sum(h["x"]**2, axis=2))
-        snap = np.arange(h.shape[1])
+        ax1.plot(right_bin_now, f_err_now, c=colors[j], label=labels[j])
+        ax2.plot(right_bin_disrupt, f_err_disrupt, c=colors[j], label=labels[j])
 
-        ok = (h["ok"] & (h["mvir"] > 32*mp) & 
-              c["ok"] & (c["m_bound"] > 32*mp) & 
-              (r_c > c["r50_bound"]))
+    ax1.set_xscale("log")
+    ax1.set_xlabel(r"$r/R_{\rm vir}$")
+    ax1.set_ylabel(r"$f_{\rm error}(< r/R_{\rm vir})$")
+    ax1.legend(loc="upper right", fontsize=17)
+    fig1.savefig(path.join(OUT_DIR, "core_stitching_now.png"))
 
-        last_snap = np.zeros(len(h), dtype=int)
-        rd_hc = np.zeros(len(h))
-        r_half = np.zeros(len(h))
-        rh_last = np.zeros(len(h))
-        for i in range(len(last_snap)):
-            if np.sum(ok[i]) == 0 or h["ok"][i,-1]:
-                last_snap[i] = -1
-            else:
-                last_snap[i] = np.max(snap[ok[i]])
-            dr_hc[i] = np.sqrt(np.sum((
-                h["x"][i,last_snap[i],:] - c["x"][i,last_snap[i],:])**2,
-            ))
-            r_half = c["r50_bound"][i,last_snap[i]]
-            rh_last = r_h[i,last_snap[i]]
-
-        is_valid = last_snap != -1
-        is_err = r_half < dr_hc
-        r0 = host["rvir"][last_snap]
-
-        n_tot_disrupt, _ = np.histogram(
-            r_peri[is_valid]/r0[is_valid], bins=r_bins)
-        n_err_disrupt, _ = np.histogram(
-            r_peri[is_valid & is_err]/r0[is_valid & is_err], bins=r_bins)
-        N_tot_disrupt += n_tot_disrupt
-        N_err_disrupt += n_err_disrupt
-
-    N_tot_now = np.cumsum(N_tot_now)
-    N_err_now = np.cumsum(N_err_now)
-    N_tot_disrupt = np.cumsum(N_tot_disrupt)
-    N_err_disrupt = np.cumsum(N_err_disrupt)
-
-    print("now:    ", N_tot_now[-1], N_err_now[-1])
-    print("disrupt:", N_tot_disrupt[-1], N_err_disrupt[-1])
-
-    ok_now = N_tot_now > 2
-    ok_disrupt = N_tot_disrupt > 10
-
-    f_err_now = N_err_now[ok_now]/N_tot_now[ok_now]
-    right_bin_now = r_bins[1:][ok_now]
-    f_err_disrupt = N_err_disrupt[ok_disrupt]/N_tot_disrupt[ok_disrupt]
-    right_bin_disrupt = r_bins[1:][ok_disrupt]
-
-    fig, ax = plt.subplots()
-    ax.plot(right_bin_now, f_err_now, c=pc("r"))
-    ax.set_xscale("log")
-    ax.set_xlabel(r"$r/R_{\rm vir}$")
-    ax.set_ylabel(r"$f_{\rm error}(< r/R_{\rm vir})$")
-    fig.savefig("../plots/core_plots/core_stitching_now.png")
-
-    fig, ax = plt.subplots()
-    ax.plot(right_bin_disrupt, f_err_disrupt, c=pc("r"))
-    ax.set_xscale("log")
-    ax.set_xlabel(r"$r_{\rm peri}/R_{\rm vir}$")
-    ax.set_ylabel(r"$f_{\rm error}(< r_{\rm peri}/R_{\rm vir})$")
-    fig.savefig("../plots/core_plots/core_stitching_disrupt.png")
+    ax2.set_xscale("log")
+    ax2.set_xlabel(r"$r_{\rm peri}/R_{\rm vir}$")
+    ax2.set_ylabel(r"$f_{\rm error}(< r_{\rm peri}/R_{\rm vir})$")
+    ax2.legend(loc="upper right", fontsize=17)
+    fig2.savefig(path.join(OUT_DIR, "core_stitching_disrupt.png"))
 
 def core_ok(c, param):
     mp = param["mp"]/param["h100"]
@@ -419,11 +693,29 @@ def rockstar_ok(h, c, param):
     h_ok[prev_s_err] = False
     return h_ok
 
+def combine_cores_rockstar(h, c, param):
+    ok_h = rockstar_ok(h, c, param)
+    ok_c = core_ok(c, param)
+    
+    ok = ok_h | ok_c
+    x = np.zeros((h.shape[0], h.shape[1], 3))
+    mvir = np.zeros(h.shape)
+
+    for snap in range(h.shape[1]):
+        mvir[ok_h[:,snap],snap] = h["mvir"][ok_h[:,snap],snap]
+        x[ok_h[:,snap],snap] = h["x"][ok_h[:,snap],snap]
+
+        mvir[ok_c[:,snap],snap] = c["m_bound"][ok_c[:,snap],snap]
+        x[ok_c[:,snap],snap] = c["x"][ok_c[:,snap],snap]
+
+    return mvir, x, ok
+        
+
 def ufd_frequency():
-    palette.configure(False)
+    palette.configure(USE_TEX)
 
     base_dir = "/oak/stanford/orgs/kipac/users/phil1/simulations/ZoomIns/"
-    suite = "SymphonyMilkyWay"
+    suite = SUITE
 
     param = symlib.simulation_parameters(suite)
     mp = param["mp"]/param["h100"]
@@ -492,24 +784,170 @@ def ufd_frequency():
     ax.set_yscale("log")
     ax.set_ylim(0.2, 100)
     ax.set_xlim(0, 50)
-    fig.savefig("../plots/core_plots/ufd_freq_%s.png" % names[i])
+    fig.savefig(path.join(OUT_DIR, "ufd_freq_%s.png") % names[i])
 
 def nfw_mass_frac(r_rvir, cvir):
     r_rs = r_rvir * cvir
     def M_enc(x): return np.log(1 + x) + 1/(1 + x) - 1
     return M_enc(r_rs) / M_enc(cvir)
 
+def radius_cdf():
+    print("radius_cdf")
+    palette.configure(USE_TEX)
 
-def radial_distribution():
     base_dir = "/oak/stanford/orgs/kipac/users/phil1/simulations/ZoomIns/"
-    suite = "SymphonyMilkyWay"
+
+    fig_main, ax_main = plt.subplots()
+    fig_hr, ax_hr = plt.subplots()
+    fig_c, ax_c = plt.subplots()
+    fig_rs, ax_rs = plt.subplots()
+
+    figs = [fig_main, fig_hr, fig_c, fig_rs]
+    axes = [ax_main, ax_hr, ax_c, ax_rs]
+
+    npeak_cuts = [0.3e3, 3e3, 30e3]
+    cut_labels = [
+        r"$N_{\rm peak} > 3\times 10^2$",
+        r"$N_{\rm peak} > 3\times 10^3$",
+        r"$N_{\rm peak} > 3\times 10^4$",
+    ]
+    cut_colors = [pc("r"), pc("o"), pc("b")]
+
+    suites = ["SymphonyMilkyWay", "SymphonyMilkyWayHR", "SymphonyMilkyWayLR"]
     
-    bins = [1e8, 1e9, 1e10, 1e11]
-    colors = [pc("r"), pc("o"), pc("b")]
+    fig_suites = [[0, 0], [1, 1], [1, 2], [1, 2]]
+    fig_types = [[1, 0], [1, 0], [1, 1], [0, 0]]
+    fig_suffix = ["main", "hr", "c", "rs"]
+    fig_labels = [[r"${\rm Core-tracking}$", r"${\rm Rockstar}$"],
+                  [r"${\rm Core-tracking}$", r"${\rm Rockstar}$"],
+                  [r"${\rm High-res}$", r"${\rm Low-res}$"], 
+                  [r"${\rm High-res}$", r"${\rm Low-res}$"]]
+
+    for i_suite in range(len(suites)):
+        suite = suites[i_suite]
+        param = symlib.simulation_parameters(suite)
+        mp = param["mp"]/param["h100"]
+
+        cs = [None]*symlib.n_hosts(suite)
+        hs, hists = [None]*len(cs), [None]*len(cs)
+
+        for halo_type in range(2):
+            npeaks = []
+            rads = []
+            
+            n_host = 0
+            
+            for i_host in range(symlib.n_hosts(suite)):
+                print("%s: %2d/%2d" % (suite, i_host, symlib.n_hosts(suite) - 1))
+
+                sim_dir = symlib.get_host_directory(base_dir, suite, i_host)
+
+                if halo_type == 0:
+                    hs[i_host], hists[i_host] = symlib.read_subhalos(sim_dir)
+                    cs[i_host] = symlib.read_cores(sim_dir)
+                h, hist, c = hs[i_host], hists[i_host], cs[i_host]
+
+                if halo_type == 0:
+                    mvir, x = h["mvir"], h["x"]
+                    ok = rockstar_ok(h, c, param)
+                elif halo_type == 1:
+                    mvir, x, ok = combine_cores_rockstar(h, c, param)
+                else:
+                    assert(0)
+
+                r = np.sqrt(np.sum(x[:,-1,:]**2, axis=1)) / h["rvir"][0,-1]
+                npeak = hist["mpeak"]/mp
+
+                ok[0,-1] = False
+
+                npeaks.append(npeak[ok[:,-1]])
+                rads.append(r[ok[:,-1]])
+                n_host += 1
+
+            r = np.hstack(rads)
+            npeak = np.hstack(npeaks)
+
+            for i_fig in range(len(figs)):
+                fig, ax = figs[i_fig], axes[i_fig]
+                suites_to_plot = fig_suites[i_fig]
+                types_to_plot = fig_types[i_fig]
+
+                for i_curve in range(len(suites_to_plot)):
+                    if suites_to_plot[i_curve] != i_suite: continue
+                    if types_to_plot[i_curve] != halo_type: continue
+
+                    for i_mult in range(len(npeak_cuts)):
+                        ok = (npeak > npeak_cuts[i_mult]) & (r < 1)
+
+                        ls = "-" if i_curve == 0 else "--"
+                        color = cut_colors[i_mult]
+
+                        ax.plot(np.sort(r[ok]),
+                                np.arange(np.sum(ok))/np.sum(ok),
+                                ls=ls, c=color)
+
+    for i_fig in range(len(figs)):
+        fig, ax = figs[i_fig], axes[i_fig]
+        suffix = fig_suffix[i_fig]
+
+        for i_rad in range(len(npeak_cuts)):
+            ax.plot([], [], label=cut_labels[i_rad],
+                    c=cut_colors[i_rad])
+
+        ax.plot([], [], "-", c=pc("a"), label=fig_labels[i_fig][0])
+        ax.plot([], [], "--", c=pc("a"), label=fig_labels[i_fig][1])
+        
+        r = np.linspace(0, 1, 200)
+        ax.plot(r, nfw_mass_frac(r, 10), ":", c="k",
+                label=r"${\rm NFW,\,c_{\rm vir}=10}$")
+
+
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.set_xlabel(r"$r/R_{\rm vir}$")
+        ax.set_ylabel(r"$N(<r/R_{\rm vir})$")
+
+        ax.legend(loc="lower right", fontsize=17)
+    
+        fig.savefig(path.join(OUT_DIR, "radius_cdf_%s.png" % suffix))
+
+def particle_mass_profile():
+    r, scaled_rho = np.loadtxt("tables/SymphonyMilkyWay_density_profile.txt").T
+    rho = scaled_rho/r**2
+    
+    
+
+def mass_loss():
+    print("mass_loss")
+    palette.configure(USE_TEX)
+    
+    base_dir = "/oak/stanford/orgs/kipac/users/phil1/simulations/ZoomIns/"
+    suite = SUITE
+
+    if suite == "SymphonyMilkyWay":
+        bins = [1e8, 1e9, 1e10, 1e11]
+        colors = [pc("b"), pc("o"), pc("r")]
+        labels = [r"$10^{8} < M_{\rm peak}/M_\odot < 10^{9}$",
+                  r"$10^{9} < M_{\rm peak}/M_\odot < 10^{10}$",
+                  r"$10^{10} < M_{\rm peak}/M_\odot < 10^{11}$"]
+
+    else:
+        bins = [1e7, 1e8, 1e9, 1e10, 1e11]
+        colors = [pc("p"), pc("b"), pc("o"), pc("r")]
+        labels = [r"$10^{7} < M_{\rm peak}/M_\odot < 10^{8}$",
+                  r"$10^{8} < M_{\rm peak}/M_\odot < 10^{9}$",
+                  r"$10^{9} < M_{\rm peak}/M_\odot < 10^{10}$",
+                  r"$10^{10} < M_{\rm peak}/M_\odot < 10^{11}$"]
+    n_bins = len(bins) - 1
 
     r_bins = np.linspace(0, 1, 101)
     h_n = np.zeros((len(bins)-1, len(r_bins)-1))
     c_n = np.zeros((len(bins)-1, len(r_bins)-1))
+
+    
+    n = len(bins) - 1
+    ratio_h, ratio_c = [[] for _ in range(n)], [[] for _ in range(n)]
+    r_h, r_c = [[] for _ in range(n)], [[] for _ in range(n)]
 
     for i in range(symlib.n_hosts(suite)):
         if i in invalid_hosts: continue
@@ -524,47 +962,206 @@ def radial_distribution():
         h_ok = rockstar_ok(h, c, param)[1:,-1]
         c_r = np.sqrt(np.sum(c["x"][1:,-1,:]**2, axis=1))
         c_ok = core_ok(c, param)[1:,-1]
+        
+        for j in range(len(bins) - 1):
+            mpeak_ok = ((hist["mpeak"] > bins[j]) &
+                        (hist["mpeak"] < bins[j+1]))[1:]
 
-        for i in range(len(bins) - 1):
-            mpeak_ok = ((hist["mpeak"] > bins[i]) &
-                        (hist["mpeak"] < bins[i+1]))[1:]
-            h_n[i,:] += np.histogram(h_r[h_ok & mpeak_ok]/h["rvir"][0,-1],
-                                     bins=r_bins)[0]
-            c_n[i,:] += np.histogram(c_r[c_ok & mpeak_ok]/h["rvir"][0,-1],
-                                     bins=r_bins)[0]
+            ratio = (h["mvir"][:,-1]/hist["mpeak"])[1:]
+            ratio_h[j].append(ratio[mpeak_ok & h_ok])
+            r_h[j].append(h_r[mpeak_ok & h_ok] / h["rvir"][0,-1])
+
+            r = np.copy(h_r)
+            ratio[c_ok] = (c["m_bound"][:,-1]/hist["mpeak"])[1:][c_ok]
+            r[c_ok] = c_r[c_ok]
+
+            ratio_c[j].append(ratio[mpeak_ok & (c_ok | h_ok)])
+            r_c[j].append(r[mpeak_ok & (c_ok | h_ok)] / h["rvir"][0,-1])
+
+    for i in range(len(ratio_h)):
+        ratio_h[i] = np.hstack(ratio_h[i])
+        ratio_c[i] = np.hstack(ratio_c[i])
+        r_h[i] = np.hstack(r_h[i])
+        r_c[i] = np.hstack(r_c[i])
+
+    r_lim = [0.2, 0.5, 1]
+    rlim_name = ["02", "05", "10"]
+    r_bins = 10**np.linspace(-4, 0, 301)
+    low, med, high = np.zeros((n_bins, 300)), np.zeros((n_bins, 300)), np.zeros((n_bins, 300))
+
+    n_min = 8
+
+    for i in range(len(r_lim)):
+        fig, ax = plt.subplots()
+
+        for j in range(len(bins) - 1):
+            ok_h = r_h[j] < r_lim[i]
+            ok_c = r_c[j] < r_lim[i]
+
+            ax.hist(ratio_h[j][ok_h], color=colors[j], cumulative=True,
+                    density=True, histtype="step", lw=3, bins=r_bins, ls="--")
+            ax.hist(ratio_c[j][ok_c], color=colors[j], cumulative=True,
+                    density=True, histtype="step", lw=3, bins=r_bins,
+                    label=labels[j])
+        
+            ax.set_xlabel(r"$m=M(z=0)/M_{\rm peak}$")
+            ax.set_ylabel(r"$N(<m)$")
+            ax.legend(loc="upper left", fontsize=18)
+
+            """
+            for k in range(len(r_bins) - 1):
+                if i != 0: break
+                ok = (r[j] < r_bins[k]) & ok_c
+                n = np.sum(ok)
+                if n < n_min:
+                    low[k], med[k], high[k] = -1, -1, -1
+                else:
+                    low[k] = np.percentile(r[j][ok], 50 - 68/2)
+                    med[k] = np.percentile(r[j][ok], 50)
+                    high[k] = np.percentile(r[j][ok], 50 + 68/2)
+            """
+
+            
+        ax.set_xscale("log")
+        ax.set_xlim(1e-3, 1)
+        fig.savefig(path.join(OUT_DIR, "mass_loss_high_r%s.png") %
+                    rlim_name[i])
+
+def mass_frac_cdf():
+    print("radius_cdf")
+    palette.configure(USE_TEX)
+
+    base_dir = "/oak/stanford/orgs/kipac/users/phil1/simulations/ZoomIns/"
+
+    fig_main, ax_main = plt.subplots()
+    fig_hr, ax_hr = plt.subplots()
+    fig_c, ax_c = plt.subplots()
+    fig_rs, ax_rs = plt.subplots()
+
+    figs = [fig_main, fig_hr, fig_c, fig_rs]
+    axes = [ax_main, ax_hr, ax_c, ax_rs]
+
+    npeak_cuts = [0.3e3, 3e3, 30e3]
+    cut_labels = [
+        r"$N_{\rm peak} > 3\times 10^2$",
+        r"$N_{\rm peak} > 3\times 10^3$",
+        r"$N_{\rm peak} > 3\times 10^4$",
+    ]
+    cut_colors = [pc("r"), pc("o"), pc("b")]
+
+    suites = ["SymphonyMilkyWay", "SymphonyMilkyWayHR", "SymphonyMilkyWayLR"]
     
-    palette.configure(True)
+    fig_suites = [[0, 0], [1, 1], [1, 2], [1, 2]]
+    fig_types = [[1, 0], [1, 0], [1, 1], [0, 0]]
+    fig_suffix = ["main", "hr", "c", "rs"]
+    fig_labels = [[r"${\rm Core-tracking}$", r"${\rm Rockstar}$"],
+                  [r"${\rm Core-tracking}$", r"${\rm Rockstar}$"],
+                  [r"${\rm High-res}$", r"${\rm Low-res}$"], 
+                  [r"${\rm High-res}$", r"${\rm Low-res}$"]]
 
-    fig, ax = plt.subplots()
-    r_mid = (r_bins[1:] + r_bins[:-1]) / 2
+    for i_suite in range(len(suites)):
+        suite = suites[i_suite]
+        param = symlib.simulation_parameters(suite)
+        mp = param["mp"]/param["h100"]
 
-    for i in range(len(bins) - 1):
-        h_n[i] = np.cumsum(h_n[i]) / np.sum(h_n[i])
-        c_n[i] = np.cumsum(c_n[i]) / np.sum(c_n[i])
-        ax.plot(r_mid, h_n[i,:], "--", c=colors[i])
-        ax.plot(r_mid, c_n[i,:], "-", c=colors[i])
+        cs = [None]*symlib.n_hosts(suite)
+        hs, hists = [None]*len(cs), [None]*len(cs)
 
-    ax.plot(r_mid, nfw_mass_frac(r_mid, 10), ":", c="k",
-            label=r"${\rm NFW,\,c_{\rm vir}=10}$")
-    ax.plot([], [], c=colors[0],
-            label=r"$10^8 < M_{\rm peak}/M_\odot < 10^9$")
-    ax.plot([], [], c=colors[1],
-            label=r"$10^9 < M_{\rm peak}/M_\odot < 10^{10}$")
-    ax.plot([], [], c=colors[2],
-            label=r"$10^{10} < M_{\rm peak}/M_\odot < 10^{11}$")
+        for halo_type in range(2):
+            npeaks = []
+            rads = []
+            
+            n_host = 0
+            
+            for i_host in range(symlib.n_hosts(suite)):
+                print("%s: %2d/%2d" % (suite, i_host, symlib.n_hosts(suite) - 1))
 
-    ax.set_xlabel(r"$r/R_{\rm vir}$")
-    ax.set_ylabel(r"$N(<r/R_{\rm vir})/N(<R_{\rm vir})$")
-    ax.legend(loc="lower right", fontsize=17)
+                sim_dir = symlib.get_host_directory(base_dir, suite, i_host)
 
-    fig.savefig("../plots/core_plots/radial_cdf.png")
+                if halo_type == 0:
+                    hs[i_host], hists[i_host] = symlib.read_subhalos(sim_dir)
+                    cs[i_host] = symlib.read_cores(sim_dir)
+                h, hist, c = hs[i_host], hists[i_host], cs[i_host]
+
+                if halo_type == 0:
+                    mvir, x = h["mvir"], h["x"]
+                    ok = rockstar_ok(h, c, param)
+                elif halo_type == 1:
+                    mvir, x, ok = combine_cores_rockstar(h, c, param)
+                else:
+                    assert(0)
+
+                r = np.sqrt(np.sum(x[:,-1,:]**2, axis=1)) / h["rvir"][0,-1]
+                npeak = hist["mpeak"]/mp
+
+                ok[0,-1] = False
+
+                npeaks.append(npeak[ok[:,-1]])
+                rads.append(r[ok[:,-1]])
+                n_host += 1
+
+            r = np.hstack(rads)
+            npeak = np.hstack(npeaks)
+
+            for i_fig in range(len(figs)):
+                fig, ax = figs[i_fig], axes[i_fig]
+                suites_to_plot = fig_suites[i_fig]
+                types_to_plot = fig_types[i_fig]
+
+                for i_curve in range(len(suites_to_plot)):
+                    if suites_to_plot[i_curve] != i_suite: continue
+                    if types_to_plot[i_curve] != halo_type: continue
+
+                    for i_mult in range(len(npeak_cuts)):
+                        ok = (npeak > npeak_cuts[i_mult]) & (r < 1)
+
+                        ls = "-" if i_curve == 0 else "--"
+                        color = cut_colors[i_mult]
+
+                        ax.plot(np.sort(r[ok]),
+                                np.arange(np.sum(ok))/np.sum(ok),
+                                ls=ls, c=color)
+
+    for i_fig in range(len(figs)):
+        fig, ax = figs[i_fig], axes[i_fig]
+        suffix = fig_suffix[i_fig]
+
+        for i_rad in range(len(npeak_cuts)):
+            ax.plot([], [], label=cut_labels[i_rad],
+                    c=cut_colors[i_rad])
+
+        ax.plot([], [], "-", c=pc("a"), label=fig_labels[i_fig][0])
+        ax.plot([], [], "--", c=pc("a"), label=fig_labels[i_fig][1])
+        
+        r = np.linspace(0, 1, 200)
+        ax.plot(r, nfw_mass_frac(r, 10), ":", c="k",
+                label=r"${\rm NFW,\,c_{\rm vir}=10}$")
+
+
+        ax.set_xlim(1e-3, 1)
+        ax.set_ylim(0, 1)
+        ax.set_xscale("log")
+        ax.set_xlabel(r"$m = M_{\rm vir}/M_{\rm peak}$")
+        ax.set_ylabel(r"$N(<m)$")
+
+        ax.legend(loc="lower right", fontsize=17)
+    
+        fig.savefig(path.join(OUT_DIR, "mass_frac_cdf_%s.png" % suffix))
+
 
 def main():
-    #plot_mass_loss()
-    #mass_function()
+    plot_mass_loss()
+    #ufd_frequency()
+    
     #survival_time()
     #stitching_errors()
-    #ufd_frequency()
-    radial_distribution()
+    #mass_loss()
+
+    #mass_function()
+    #mass_function_resolution()
+    #radius_cdf()
+    #radius_cdf()
+    #mass_frac_cdf()
+    tmp_mass_frac_cdf()
 
 if __name__ == "__main__": main()

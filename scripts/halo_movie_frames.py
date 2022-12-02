@@ -18,14 +18,14 @@ try:
 except:
     def pc(c): return c
 
-SUITE = "SymphonyMilkyWayLR"
-SUB_INDEX = 5
-HOST_INDEX = 4
+SUITE = "SymphonyMilkyWay"
+HOST_INDEX = 44
+SUB_INDICES = [237, 372, 450]
 VMIN, VMAX = 2.5, 7.0
-K = 128
+K = 64
 CMAP = "bone"
 
-BASE_OUT_DIR = "/home/users/phil1/code/src/github.com/phil-mansfield/symphony_pipeline/plots/movie_frames"
+BASE_OUT_DIR = path.join("/home/users/phil1/code/src/github.com/phil-mansfield/symphony_pipeline/plots/movie_frames", SUITE)
 
 def spline(x):
     r1 = x <= 1
@@ -98,16 +98,19 @@ def is_bound_iter(n_iter, param, dx, dv, ok=None, order=None):
     return ok, order
 
 def main():
+    for i_sub in SUB_INDICES:
+        plot_subhalo(i_sub)
+
+def plot_subhalo(i_sub):
     base_dir = "/oak/stanford/orgs/kipac/users/phil1/simulations/ZoomIns/"
         
     # Work out subdirectory names and create as needed.
     print(HOST_INDEX)
     out_dir = path.join(BASE_OUT_DIR, "host_%d" % HOST_INDEX,
-                        "sub_%d" % SUB_INDEX)
+                        "sub_%d" % i_sub)
     print(out_dir)
     os.makedirs(out_dir, exist_ok=True)    
     sim_dir = symlib.get_host_directory(base_dir, SUITE, HOST_INDEX)
-    i_sub = SUB_INDEX
 
     # Load simulation information.
     param = symlib.simulation_parameters(sim_dir)
@@ -124,6 +127,10 @@ def main():
     r_half = c["r50_bound"]
     c["ok"] = c["ok"] & (r_c > c["r50_bound"]) & (c["m_bound"] > 32*mp)
 
+    dx = h["x"][:,-1] - c["x"][:,-1]
+    dr = np.sqrt(np.sum(dx**2, axis=1))
+    ok = (dr > r_half[:,-1]) & h["ok"][:,-1] & c["ok"][:,-1]
+
     frame_idx = 0
     # fig, ax = plt.subplots(1, 2, figsize=(16, 8))
     fig, axs = plt.subplots(1, 2, figsize=(16, 8))
@@ -136,6 +143,7 @@ def main():
     cores = symlib.read_particles(info, sim_dir, None, "infall_core")
 
     for snap in range(len(snaps)):
+        if snap != len(snaps) - 1: continue
         if snap < hist["first_infall_snap"][i_sub] - 10: continue
         print(snap)
 
@@ -170,7 +178,8 @@ def main():
 
         # Everything from here on is just plotting nonsense.
         r_max, grid_pts = np.max(h[0,:]["rvir"]), 201
-        r_max_b = 2*np.max(c[i_sub,:]["r50_bound"])
+        r_max_b = 2*np.max(c[i_sub,c["ok"][i_sub,:]]["r50_bound"])
+
         grid = eval_grid(r_max, [0, 0], grid_pts)
         grid_b = eval_grid(r_max_b, [0, 0], grid_pts)
 
