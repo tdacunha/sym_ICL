@@ -283,7 +283,7 @@ class MassProfile(object):
             if bound_only:
                 is_bound = np.zeros(len(ok), dtype=bool)
                 is_bound_ok = gravitree.binding_energy(
-                    dx[ok], dv[ok], mp, eps, n_iter=2)
+                    dx[ok], dv[ok], mp, eps, n_iter=2) < 0
                 is_bound[ok] = is_bound_ok
             else:
                 is_bound = ok
@@ -307,74 +307,57 @@ def main():
 
     palette.configure(False)
     
-    base_dir = "/home/phil/code/src/github.com/phil-mansfield/symphony_pipeline/tmp_data"
+    base_dir = "/sdf/home/p/phil1/ZoomIns"
     suite_name = "SymphonyMilkyWay"
     sim_dir = path.join(base_dir, suite_name, "Halo023")
     
     param = symlib.parameter_table[suite_name]
-    h, hist = symlib.read_subhalos(param, sim_dir)
-    h_cmov = np.copy(h)
+    h, hist = symlib.read_subhalos(sim_dir)
+    c = symlib.read_cores(sim_dir)
+    h_cmov, hist_cmov = symlib.read_subhalos(sim_dir, comoving=True)
+
     info = symlib.ParticleInfo(sim_dir)
 
     scale = symlib.scale_factors(sim_dir)
     cosmo = cosmology.setCosmology("", symlib.colossus_parameters(param))
-    h = symlib.set_units_halos(h_cmov, scale, param)
     
-    targets = np.where(h["ok"][:,234] & h["ok"][:,235])[0]
-    targets = targets[targets >= 3]
+    targets = np.where(c["ok"][:,235])[0]
+    targets = targets[targets >= 3] # I don't want to deal with the big ones
     
-    snap234 = SnapshotData(info, sim_dir, 234, scale[234], h_cmov, param)
-    snap235 = SnapshotData(info, sim_dir, 235, scale[235], h_cmov, param)
+    snap = 235
+    sd = SnapshotData(info, sim_dir, snap, scale[snap], h_cmov, param)
+    prof = MassProfile(sd.param, snap, h, sd.x, sd.owner, sd.valid)
+    
+    print("""# 0 - subhalo index
+# 1 - log10 M_bound (no tides)
+# 2 - log10 M_tidal (tides computed relative to bound mass)
+# 3 - log10 M_tidal (tides computed relative to all mass)
+# 4 - log10 R_tidal (tides computed relative to bound mass)
+# 5 - log10 R_tidal (tides computed relative to all mass)
+    """)
 
-    n_core = 32
-    
-    rs_cores = rockstar_cores(snap234, h, targets, n_core)
-    infall_cores = symlib.read_particles(info, sim_dir, -1, "infall_core")
-    infall_cores = infall_cores[:,:n_core]
-
-    infall_tracks = [None]*len(targets)
-    rs_tracks = [None]*len(targets)
-
-    prof235 = MassProfile(snap235.param, 235, h, snap235.x,
-                          snap235.owner, snap235.valid)
-    
     for i in range(len(targets)):
         i_sub = targets[i]
-        print("%3d" % i_sub, end=" ")
-        infall_tracks[i] = SubhaloTrack(i_sub, snap234, infall_cores, param)
-        rs_tracks[i] = SubhaloTrack(i_sub, snap234, rs_cores, param)
-
-        x = h["x"][i_sub,235]
-        print("%8.3f %8.3f %8.3f" % (x[0], x[1], x[2]), end=" ")
+        ok = sd.ok[i_sub]
+        r_tidal, m_tidal = prof.tidal_radius(
+            c["x"][i_sub,snap], sd.x[i_sub][ok],
+            c["v"][i_sub,snap], sd.v[i_sub][ok],
+            bound_only=True
+        )
+        r_tidal_ub, m_tidal_ub = prof.tidal_radius(
+            c["x"][i_sub,snap], sd.x[i_sub][ok],
+            c["v"][i_sub,snap], sd.v[i_sub][ok],
+            bound_only=False
+        )
         
-        infall_tracks[i].next_snap(snap235)
-        x = infall_tracks[i].x[235]
-        print("%8.3f %8.3f %8.3f" % (x[0], x[1], x[2]), end=" ")
-        
-        rs_tracks[i].next_snap(snap235)
-        x = rs_tracks[i].x[235]
-        print("%8.3f %8.3f %8.3f" % (x[0], x[1], x[2]), end=" ")
-
-        v = rs_tracks[i].v[235]
-        dx = delta(snap235.x[i_sub], x)
-        dv = delta(snap235.v[i_sub], v)
-
-        ok = snap235.ok[i_sub]
-        rs_r_tidal, rs_m_tidal = prof235.tidal_radius(
-            x, snap235.x[i_sub][ok], v, snap234.v[i_sub][ok], bound_only=False)
-        
-        rs_is_bound, _ = is_bound_iter(10, snap235.param, dx, dv, ok=ok)
-        rs_dr = np.sqrt(np.sum(dx**2, axis=1))
-        rs_m_bound = snap235.param["mp"]*np.sum(rs_is_bound)
-        
-        if rs_m_bound == 0:
-            rs_r99 = 0.0
+        if m_tidal > 0:
+            print("%4d %.3f %.3f %.3f %.3f %.3f" % 
+                  (i_sub, np.log10(c["m_bound"][i_sub,235]),
+                   np.log10(m_tidal), np.log10(m_tidal_ub),
+                   np.log10(r_tidal), np.log10(r_tidal_ub)))
         else:
-            rs_r99 = np.quantile(rs_dr[rs_is_bound], 0.99)
-            
-        print("%7.3f %7.3f %7.3f %.3g %.3g %.3g" % (
-            (h["rvir"][i_sub,235], rs_r_tidal, rs_r99,
-             h["mvir"][i_sub,235], rs_m_tidal, rs_m_bound)
-        ))
+            print("%4d %.3f   nil %.3f   nil %.3f" % 
+                  (i_sub, np.log10(c["m_bound"][i_sub,235]),
+                   np.log10(m_tidal_ub), np.log10(r_tidal_ub)))
         
 if __name__ == "__main__": main()

@@ -6,6 +6,9 @@ import matplotlib.pyplot as plt
 
 param_sets = [
     (64, 32, pc("r"), "-", 2),
+    (64, 30, pc("r"), "-", 2),
+    (64, 27, pc("r"), "-", 2),
+    (64, 23, pc("r"), "-", 2),
     (64, 16, pc("o"), "-", 2),
     (64, 8, pc("g"), "-", 2),
     (64, 4, pc("b"), "-", 2),
@@ -24,6 +27,8 @@ param_sets = [
     (16, 4, pc("b"), ":", 2),
     (16, 1, pc("p"), ":", 2),
 
+    (8, 32, pc("r"), ".-", 2),
+    (8, 16, pc("o"), ".-", 2),
     (8, 8, pc("g"), ".-", 2),
     (8, 4, pc("b"), ".-", 2),
     (8, 1, pc("p"), ".-", 2)
@@ -88,6 +93,10 @@ def plot_valid_z0_fractions():
         f_core_rs.append(c["f_core_rs"][1:,-1])
 
         for i_suf in range(len(suffixes)):
+            if suffixes[i_suf] == "k08_n16":
+                suffixes[i_suf] = "k8_n16"
+            if suffixes[i_suf] == "k08_n32":
+                suffixes[i_suf] = "k8_n32"
             if i_suf > 0:
                 c = symlib.read_cores(sim_dir, suffix=suffixes[i_suf])
             r = np.sqrt(np.sum(c["x"][:,-1]**2, axis=1))

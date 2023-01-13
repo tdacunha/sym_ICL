@@ -13,19 +13,23 @@ from colossus.halo import mass_so
 
 try:
     import palette
-    palette.configure(False)
+    palette.configure(True)
     from palette import pc
 except:
     def pc(c): return c
 
 SUITE = "SymphonyMilkyWay"
-HOST_INDEX = 44
-SUB_INDICES = [237, 372, 450]
+HOST_INDEX = 0
+SUB_INDICES = [14]
+SNAP = 189
 VMIN, VMAX = 2.5, 7.0
-K = 64
-CMAP = "bone"
+K = 128
+K_B = 32
+CMAP = "magma"
+DIM_X = 0
+DIM_Y = 1
 
-BASE_OUT_DIR = path.join("/home/users/phil1/code/src/github.com/phil-mansfield/symphony_pipeline/plots/movie_frames", SUITE)
+BASE_OUT_DIR = path.join("../plots/movie_frames", SUITE)
 
 def spline(x):
     r1 = x <= 1
@@ -102,7 +106,7 @@ def main():
         plot_subhalo(i_sub)
 
 def plot_subhalo(i_sub):
-    base_dir = "/oak/stanford/orgs/kipac/users/phil1/simulations/ZoomIns/"
+    base_dir = "/sdf/home/p/phil1/ZoomIns"
         
     # Work out subdirectory names and create as needed.
     print(HOST_INDEX)
@@ -123,9 +127,11 @@ def plot_subhalo(i_sub):
     scale = symlib.scale_factors(sim_dir)
     snaps = np.arange(len(scale), dtype=int)    
 
+    print(np.arange(236, dtype=int)[h["ok"][i_sub,:]])
+
     r_c = np.sqrt(np.sum(c["x"]**2, axis=2))
     r_half = c["r50_bound"]
-    c["ok"] = c["ok"] & (r_c > c["r50_bound"]) & (c["m_bound"] > 32*mp)
+    r_half_rs = c["r50_bound_rs"]
 
     dx = h["x"][:,-1] - c["x"][:,-1]
     dr = np.sqrt(np.sum(dx**2, axis=1))
@@ -143,7 +149,8 @@ def plot_subhalo(i_sub):
     cores = symlib.read_particles(info, sim_dir, None, "infall_core")
 
     for snap in range(len(snaps)):
-        if snap != len(snaps) - 1: continue
+        #if snap != len(snaps) - 1: continue
+        if SNAP is not None and snap != SNAP: continue
         if snap < hist["first_infall_snap"][i_sub] - 10: continue
         print(snap)
 
@@ -177,16 +184,17 @@ def plot_subhalo(i_sub):
                 r50 = np.median(dr[ok_b])
 
         # Everything from here on is just plotting nonsense.
-        r_max, grid_pts = np.max(h[0,:]["rvir"]), 201
+        #r_max, grid_pts = np.max(h[0,:]["rvir"]), 201
+        r_max, grid_pts = 200, 201
         r_max_b = 2*np.max(c[i_sub,c["ok"][i_sub,:]]["r50_bound"])
 
         grid = eval_grid(r_max, [0, 0], grid_pts)
         grid_b = eval_grid(r_max_b, [0, 0], grid_pts)
 
-        rho_proj = density_2d_proj(x[ok], mp_dm[ok], grid, k=K)
+        rho_proj = density_2d_proj(x[ok], mp_dm[ok], grid, k=K, dim_x=DIM_X, dim_y=DIM_Y)
         rho_proj = np.log10(np.reshape(rho_proj, (grid_pts, grid_pts)))
         if plot_core:
-            rho_proj_b = density_2d_proj(dx[ok_b], mp_dm[ok_b], grid_b, k=K)
+            rho_proj_b = density_2d_proj(dx[ok_b], mp_dm[ok_b], grid_b, k=K_B, dim_x=DIM_X, dim_y=DIM_Y)
             rho_proj_b = np.log10(np.reshape(rho_proj_b, (grid_pts, grid_pts)))
         else:
             rho_proj_b = VMIN * np.ones((grid_pts, grid_pts))
@@ -195,44 +203,44 @@ def plot_subhalo(i_sub):
         ax_b.cla()
 
         ax.imshow(rho_proj, vmin=VMIN, vmax=VMAX, origin="lower",
-                  cmap="bone", extent=[-r_max, r_max, -r_max, r_max])
+                  cmap=CMAP, extent=[-r_max, r_max, -r_max, r_max])
         ax.set_xlim((-r_max, r_max))
         ax.set_ylim((-r_max, r_max))
         ax_b.imshow(rho_proj_b, vmin=VMIN, vmax=VMAX, origin="lower",
-                    cmap="bone", extent=[-r_max_b, r_max_b, -r_max_b, r_max_b])
+                    cmap=CMAP, extent=[-r_max_b, r_max_b, -r_max_b, r_max_b])
         ax_b.set_xlim((-r_max_b, r_max_b))
         ax_b.set_ylim((-r_max_b, r_max_b))
 
         if plot_core:
             ls = "-" if c["ok"][i_sub,snap] else "--"
-            symlib.plot_circle(ax, x_center[0], x_center[1],
-                               r50, lw=1.5, c=pc("r"), ls=ls)
+            symlib.plot_circle(ax, x_center[DIM_X], x_center[DIM_Y],
+                               r50, lw=1.5, c=pc("k"), ls=ls)
             symlib.plot_circle(ax_b, 0, 0, r50,
-                               lw=1.5, c=pc("r"), ls=ls)
+                               lw=6, c=pc("k"), ls=ls)
             dx_core = x_core - x_center
-            ax_b.plot(dx_core[:10,0], dx_core[:10,1], ".", alpha=0.5, c=pc("r"))
+            ax_b.plot(dx_core[:,DIM_X], dx_core[:,DIM_Y], "o", alpha=0.5, c=pc("k"), ms=10)
             dx_host = h["x"][0,snap] - x_center
-            symlib.plot_circle(ax_b, dx_host[0], dx_host[1], h["rvir"][0,snap],
+            symlib.plot_circle(ax_b, dx_host[DIM_X], dx_host[DIM_X], h["rvir"][0,snap],
                                lw=3, c="w")
 
         if h["ok"][i_sub,snap]:
             if plot_core:
                 dx_h = h["x"][i_sub,snap] - x_center
-                symlib.plot_circle(ax_b, dx_h[0], dx_h[1], h["rvir"][i_sub,snap],
+                symlib.plot_circle(ax_b, dx_h[DIM_X], dx_h[DIM_Y], r_half_rs[i_sub,snap],
                                    lw=1.5, c=pc("b"))
-            symlib.plot_circle(ax, h["x"][i_sub,snap,0], h["x"][i_sub,snap,1],
-                               h["rvir"][i_sub,snap], lw=1.5, c=pc("b"))
+            symlib.plot_circle(ax, h["x"][i_sub,snap,DIM_X], h["x"][i_sub,snap,DIM_Y],
+                               r_half_rs[i_sub,snap], lw=1.5, c=pc("b"))
 
-        ax.plot(x_core[:10,0], x_core[:10,1], ".", alpha=0.5, c=pc("r"))
+        #ax.plot(x_core[:10,DIM_X], x_core[:10,DIM_Y], ".", alpha=0.5, c=pc("r"))
         symlib.plot_circle(ax, 0, 0, h["rvir"][0,snap], lw=3, c="w")
 
         ax.set_xlabel(r"$X\ ({\rm kpc})$")
         ax.set_ylabel(r"$Y\ ({\rm kpc})$")
         ax_b.set_xlabel(r"$X\ ({\rm kpc})$")
-        ax_b.set_ylabel(r"$Y\ ({\rm kpc})$")
-        ax.set_title(r"$a(t) = %.3f$" % scale[snap])
-        ax_b.set_title(r"$a_{\rm infall} = %.3f$" %
-                       scale[hist["first_infall_snap"][i_sub]])
+        #ax_b.set_ylabel(r"$Y\ ({\rm kpc})$")
+        #ax.set_title(r"$a(t) = %.3f$" % scale[snap])
+        #ax_b.set_title(r"$a_{\rm infall} = %.3f$" %
+        #               scale[hist["first_infall_snap"][i_sub]])
 
         fig.savefig(path.join(out_dir, "frame_%03d.png" % frame_idx))
         frame_idx += 1

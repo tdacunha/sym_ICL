@@ -66,7 +66,10 @@ def main():
     out["m_tidal"], out["m_tidal_bound"], out["m_bound"] = -1, -1, -1
 
     for file_name in file_names:
-        snaps, subs = np.loadtxt(file_name, dtype=int, usecols=(0,1)).T
+        cols = np.loadtxt(file_name, dtype=int, usecols=(0,1)).T
+        if cols.shape == (0,): continue
+
+        snaps, subs = cols
         cols = np.loadtxt(file_name).T
         x, v = cols[2:5].T, cols[5:8].T
         r_tidal, r50_bound, r50_bound_rs = cols[8:11]
