@@ -44,18 +44,10 @@ python configs/MW_mass/print_config.py > configs/MW_mass/config.txt
 Now you're ready to start running the pipeline. You run a series of commands as
 
 ```
-go run <file_name>.go path/to/config.txt
-```
-
-You'll probably want to do test runs in an interactive session to make sure
-everything is working okay. If so, you cna specify the index of the halo you
-want to look at as
-
-```
 go run <file_name>.go path/to/config.txt <index>
 ```
 
-I'd recommend using the halo with the smallest tree files.
+Here, if <index> is -1, it means that the file runs on everything in the suite, and if it's a non-negative number, only the halo at that index will be run.
 
 The steps are the following:
 - `write_binary_tree.go` - Converts text consistent-trees files into binary
@@ -67,18 +59,15 @@ The steps are the following:
 - `tag_particles.go` - Assigns particles to each subhalo and tags them with 
   their infall times and other useful information
 - `xv.go` - Extracts x and v for all major subhalos.
-- `phi.go` - Computes potentials for all major subhalos.
 
 The first three are responsible for building up files related to merger trees
 and the last three are reponsible for tracking paritcles over time. The tree
 scripts don't require any particle access and are vastly cheaper to run, so
-you may be interested in running them on their own. `phi.go` is by far the
-most expensive and most niche, so you may not want to run it even if you're
-doing particle tracking.
+you may be interested in running them on their own.
 
 For the particle tracking files, you'll want to check what level your
 highest-reoslution particles are in your simulations (Symphony has them in
-Gadget's 1-indexed level, so that's the default).0 If you don't still have the 
+Gadget's 1-indexed level, so that's the default). If you don't still have the 
 original IC configuraiton files lying around, you can check by opening up the
 gadget files and seeing which level is the first to have any particles
 (using, say, github.com/phil-mansfield/read_gadget.) Once you know that, change
@@ -87,6 +76,24 @@ gadget files and seeing which level is the first to have any particles
 You may also want to change the number of files that particles are split across.
 By default, this number is 8. But you can increase it if this would lead to 
 particle files that are too large to comfortably hold in RAM at one time.
+
+The `job_tree.sh` batch file will create tree files for one suite, and the `job_track.sh` file will parallelize particle tracking across the suite. You'll need to change the config variable so that it points to the right file, and you'll need to change the `array` variable in the header so that it corresponds to the number of halos in the suite. You'll also want to give the job a new name, and you'll want to make sure the log/error files are being written to a real directory.
+
+Lastly, you run into the absolutely most annoying part of the pipeline, which is running the halo finder. (If you, dear reader, have any interest in making this less miserable, let me know.) There are three python scripts that need to be run. The first is find_infall_cores.py, which finds the "core" particles for each halo. The second is `print_core_catalogue.py`, which is the acutal halo finder and the thrid is `convert_core_catalogue.py`, which turns the plain-text output of the first file into a binary format. The script `job_track.sh` runs and parallelizes both of these.
+
+The file itself looks something like this
+```
+config=configs/MilkyWay/config.txt
+suffix=k64_n30
+snap_range=235:235
+
+python3 find_infall_cores.py ${config} ${SLURM_ARRAY_TASK_ID} &&              
+	python3 print_core_catalogue.py ${config} ${SLURM_ARRAY_TASK_ID} --reset --suffix=${suffix} --snap_range=${snap_range} &&
+   python3 convert_core_catalogue.py ${config} ${SLURM_ARRAY_TASK_ID} --suffix=${suffix} &&
+   echo "done"
+```
+
+The `config` variable should be set to the suite's config file, `suffix` allows you to have multiple runs of the subhalo finders with different parameters, so if you don't care about that, delete this line and remove the `--suffix=...` bit from the script. snap_range lets your choose which snapshot range you run the 
 
 Making data downloadable
 ------------------------
