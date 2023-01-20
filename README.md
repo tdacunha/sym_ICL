@@ -15,7 +15,7 @@
 First, create a directory in `configs/`
 
 ``` 
-mkdir configs/MW_mass
+mkdir configs/MilkyWay
 ```
 
 Next, run the following commands to diagnose any early issues (replacing the `/oak/stanford/orgs/kipac/users/ycwang19/ZEUS/MWmass_new/Halo*` substring with one that accesses all your halo directories)
@@ -89,9 +89,9 @@ You may also want to change the number of files that particles are split across.
 By default, this number is 8. But you can increase it if this would lead to 
 particle files that are too large to comfortably hold in RAM at one time.
 
-The `job_tree.sh` batch file will create tree files for one suite, and the `job_track.sh` file will parallelize particle tracking across the suite. You'll need to change the config variable so that it points to the right file, and you'll need to change the `array` variable in the header so that it corresponds to the number of halos in the suite. You'll also want to give the job a new name, and you'll want to make sure the log/error files are being written to a real directory.
+The `job_tree.sh` batch file will create tree files for one suite, and the `job_tag.sh` file will parallelize particle tracking across the suite. You'll need to change the config variable so that it points to the right file, and you'll need to change the `array` variable in the header so that it corresponds to the number of halos in the suite. You'll also want to give the job a new name, and you'll want to make sure the log/error files are being written to a real directory.
 
-Lastly, you run into the absolutely most annoying part of the pipeline, which is running the halo finder. (If you, dear reader, have any interest in making this less miserable, let me know.) There are three python scripts that need to be run. The first is find_infall_cores.py, which finds the "core" particles for each halo. The second is `print_core_catalogue.py`, which is the acutal halo finder and the thrid is `convert_core_catalogue.py`, which turns the plain-text output of the first file into a binary format. The script `job_track.sh` runs and parallelizes both of these.
+Lastly, you run into the absolutely most annoying part of the pipeline, which is running the halo finder, `job_track.sh`. (If you, dear reader, have any interest in making this less miserable, let me know.) There are three python scripts that need to be run. The first is find_infall_cores.py, which finds the "core" particles for each halo. The second is `print_core_catalogue.py`, which is the acutal halo finder and the thrid is `convert_core_catalogue.py`, which turns the plain-text output of the first file into a binary format. The script `job_track.sh` runs and parallelizes both of these.
 
 The file itself looks something like this
 ```
