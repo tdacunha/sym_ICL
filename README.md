@@ -105,7 +105,11 @@ python3 find_infall_cores.py ${config} ${SLURM_ARRAY_TASK_ID} &&
    echo "done"
 ```
 
-The `config` variable should be set to the suite's config file, `suffix` allows you to have multiple runs of the subhalo finders with different parameters, so if you don't care about that, delete this line and remove the `--suffix=...` bit from the script. snap_range lets your choose which snapshot range you run the 
+The `config` variable should be set to the suite's config file, `suffix` allows you to have multiple runs of the subhalo finders with different parameters, so if you don't care about that, delete this line and remove the `--suffix=...` bit from the script. snap_range lets you choose which snapshot range you run the (i.e. "first":"last"). The pipeline will know if your job crashe dhalfway through and won't recalculate snapshots a second time, so only mess with this if you're trying ot parallelize or only look at late times or something.
+
+print_core_catalogue.py has an additional flag, --reset. When not set, the pipeline looks for half finished files, figures out where you crashed, and starts from there. If you're restarting because something was wrong and needed to be fixed, you can cause it to start over with the --reset flag.
+
+Small simulations (e.g. MilkyWay, LMC) usually finish in about a day, while bigger sims (like the HR runs of the Cluster suite) take several days. This is because I never actually parallelized things and it's all single core other than what you can do through array jobs. What this means is that it's likely that the maximum job size SDF allows is shorter than the length of the job. To deal with this, check the log files of all the jobs that finish whnever you check in and see if they finished due to an error or due to completing the job. Rerun the job script on the ones that crashed due to timeout error. You can specify which ones to rerun by changing the SBATCH array variable to array=1,5,20 or whatever.
 
 Making data downloadable
 ------------------------
