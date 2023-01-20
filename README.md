@@ -1,5 +1,17 @@
 # How to Generate Data Products
 
+## Installing software
+
+1. Have this repo cloned somewhere in your local directory
+2. Install the numpy, scipy, and matplotlib
+3. Install symlib, using `pip install symlib -U`
+4. Install my plotting library, palette. Clone https://github.com/phil-mansfield/palette into a local directory and change your .bashrc file in your home directory so it has the following line in it: `export PYTHONPATH=$PYTHONPATH:/absolute/path/to/palette` (use `pwd` in the directory to get the absoluute path)
+5. Install the Go compiler. Ins ome local directory, run `wget https://go.dev/dl/go1.19.5.linux-amd64.tar.gz`. Go to this webpage: https://go.dev/doc/install, switch the tab under "Go installation" to "Linux", then follow the instructions. Replace `/usr/local` with the absolute path of whatever directory you want your go compiler to be in.
+6. Install my tree-code library, gravitree. Clone https://github.com/phil-mansfield/gravitree into some local directory, change the .bashrc file to have the line `export PYTHONPATH=$PYTHONPATH:/absolute/path/to/gravitree/python` in it. Go into `gravitree/python` and run `./build_script.sh`.
+
+
+## Running the pipeline
+
 First, create a directory in `configs/`
 
 ``` 
