@@ -17,6 +17,7 @@ type Config struct {
 	// The directory where all the library's files are stored
 	BaseDir []string
 	TreeStyle []string
+	UMFormat []string
 }
 
 // ParseConfig parses a six-column particle-tracking config file. The contents
@@ -43,9 +44,9 @@ func ParseConfig(fname string) *Config {
 			}
 		}
 		
-		if len(cols) != 9 {
+		if len(cols) != 10 {
 			panic(fmt.Sprintf("Line %d of %s is '%s', but you need there " +
-				"to be nine columns.", i+1, fname, line))
+				"to be ten columns.", i+1, fname, line))
 		}
 
 		matchID, err := strconv.Atoi(cols[0])
@@ -96,6 +97,7 @@ func ParseConfig(fname string) *Config {
 				treeStyle))
 		}
 		cfg.TreeStyle = append(cfg.TreeStyle, treeStyle)
+		cfg.UMFormat = append(cfg.UMFormat, cols[9])
 	}
 	
 	return cfg

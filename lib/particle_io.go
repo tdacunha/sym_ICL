@@ -302,8 +302,11 @@ func ReadVector(
 		for j := 0; j < int(hd.NHalo); j++ {
 			if int32(iFile) != hd.FileIdxs[j] {
 				continue
+			} else if hd.N0[j] == 0 {
+				x[j] = [][3]float32{ }
+				continue
 			}
-			panic("Conditioning in loop not updated")
+			//panic("Conditioning in loop not updated")
 
 			var size int64
 			err = binary.Read(f, order, &size)

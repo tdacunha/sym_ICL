@@ -17,6 +17,7 @@ func TestParseConfig(t *testing.T) {
 	treeDir := []string{"b", "bb"}
 	baseDir := []string{"c", "cc"}
 	treeStyle := []string{"ct_rvmax", "ct_rhapsody"}
+	umFmt := []string{"d", "dd"}
 	
 	if !Int32Eq(matchID, cfg.MatchID) {
 		t.Errorf("Expected MatchID = %d, got %d",
@@ -61,6 +62,11 @@ func TestParseConfig(t *testing.T) {
 	if !StringEq(treeStyle, cfg.TreeStyle) {
 		t.Errorf("Expected TreeStyle = %s, got %s",
 			treeStyle, cfg.TreeStyle)
+	}
+
+	if !StringEq(umFmt, cfg.UMFormat) {
+		t.Errorf("Expected UMFormat = %s, got %s",
+			umFmt, cfg.UMFormat)
 	}
 }
 
