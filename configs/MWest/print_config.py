@@ -28,9 +28,10 @@ data_product_dir = "/sdf/group/kipac/g/cosmo/ki21/phil1/simulations/ZoomInsPriva
 # Symphony suite, and "ct_rhapsody", the version used by rhapsody.
 tree_style = "ct_rvmax"
 
-fmt_string = "%%d %%d %s %s %d %s %s %s %s" % (eps, mp, num_snapshot_files, 
-                                               snapshot_format, tree_dir,
-                                               data_product_dir, tree_style)
+fmt_string = ("%%d %%d %s %s %d %s %s %s %s nil" %
+              (eps, mp, num_snapshot_files, 
+               snapshot_format, tree_dir,
+               data_product_dir, tree_style))
 
 for i in range(len(haloes)):
     h = haloes[i]

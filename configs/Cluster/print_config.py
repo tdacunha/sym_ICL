@@ -87,7 +87,7 @@ for i in range(len(haloes)):
 
     snapshot_format = "%s/%s/output_HR/snapshot_%%03d.%%d" % (p_dir, h)
 
-    print("%d %d %s %s %d %s %s %s %s" % (
+    print("%d %d %s %s %d %s %s %s %s nil" % (
         halo_ids[i], halo_snaps[i], eps, mp,
         num_snapshot_files, snapshot_format,
         tree_dir, data_product_dir % h, tree_style

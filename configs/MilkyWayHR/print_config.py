@@ -27,7 +27,7 @@ tree_dir = "/sdf/group/kipac/u/ollienad/MW_zoomins/%s/output_16K/rockstar/trees/
 # for the halo name with a single %.
 data_product_dir = "/sdf/group/kipac/g/cosmo/ki21/phil1/simulations/ZoomIns/SymphonyMilkyWayHR/%s/"
 
-fmt_string = "%%d %%d %s %s %d %s %s %s ct_rvmax" % (
+fmt_string = "%%d %%d %s %s %d %s %s %s ct_rvmax nil" % (
     eps, mp, num_snapshot_files, 
     snapshot_format, tree_dir,
     data_product_dir
