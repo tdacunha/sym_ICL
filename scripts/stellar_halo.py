@@ -179,6 +179,8 @@ def main():
         for i in range(len(target_subs)):
             target_subs_ok[i] = symlib.is_real_confirmed(
                 part_info, h, target_subs[i])
+            first_snap = np.where(h[target_subs[i]]["ok"])[0][0] # checking
+            print(first_snap)
         target_subs = target_subs[target_subs_ok]
         print(target_subs)
         # mp_star is a list of arrays giving the stellar mass of each particle.
