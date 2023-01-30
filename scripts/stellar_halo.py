@@ -180,7 +180,8 @@ def main():
             target_subs_ok[i] = symlib.is_real_confirmed(
                 part_info, h, target_subs[i])
             first_snap = np.where(h[target_subs[i]]["ok"])[0][0] # checking
-            print(first_snap)
+            ok = symlib.read_particles(part_info, None, first_snap, "valid", owner=target_subs[i])
+            print(ok)
         target_subs = target_subs[target_subs_ok]
         print(target_subs)
         # mp_star is a list of arrays giving the stellar mass of each particle.
