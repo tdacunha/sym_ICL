@@ -174,11 +174,13 @@ def main():
         # a couple small ones for debugging and then changing it back to
         # everything later. Don't include halo 0.
         target_subs = np.arange(1, len(h))
-
+        print(target_subs)
         target_subs_ok = np.zeros(len(target_subs), dtype=bool)
         for i in range(len(target_subs)):
             target_subs_ok[i] = symlib.is_real_confirmed(
                 part_info, h, target_subs[i])
+            if i < 10:
+                print(target_subs_ok[i])
         target_subs = target_subs[target_subs_ok]
         print(target_subs)
         # mp_star is a list of arrays giving the stellar mass of each particle.
