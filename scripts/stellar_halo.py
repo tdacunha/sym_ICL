@@ -181,9 +181,9 @@ def main():
                 part_info, h, target_subs[i])
             first_snap = np.where(h[target_subs[i]]["ok"])[0][0] # checking
             ok = symlib.read_particles(part_info, None, first_snap, "valid", owner=target_subs[i])
-            print(ok)
-        target_subs = target_subs[target_subs_ok]
-        print(target_subs)
+            #print(ok)
+        #target_subs = target_subs[target_subs_ok]
+        #print(target_subs)
         # mp_star is a list of arrays giving the stellar mass of each particle.
         mp_star, _, m_star, r_half, Fe_H = symlib.tag_stars(
             sim_dir, gal_halo, target_subs=target_subs)
