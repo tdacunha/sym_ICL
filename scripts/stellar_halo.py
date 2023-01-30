@@ -180,7 +180,7 @@ def main():
             target_subs_ok[i] = symlib.is_real_confirmed(
                 part_info, h, target_subs[i])
         target_subs = target_subs[target_subs_ok]
-
+        print(target_subs)
         # mp_star is a list of arrays giving the stellar mass of each particle.
         mp_star, _, m_star, r_half, Fe_H = symlib.tag_stars(
             sim_dir, gal_halo, target_subs=target_subs)
