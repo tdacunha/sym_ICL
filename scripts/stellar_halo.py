@@ -26,11 +26,11 @@ def final_radii(sim_dir, part_info, target_subs=None):
         target_subs = np.arange(1, len(h))
 
     last_snap = param["n_snap"] - 1
-    
+
     # The cut that determines whether a tracked core is still intact
     core_r = np.sqrt(np.sum(c["x"]**2, axis=2))
     mp = param["mp"]/param["h100"]
-    # core tracking must have started, core needs 32 particles, and it can't 
+    # core tracking must have started, core needs 32 particles, and it can't
     # overlapping qith the host's center.
     core_intact = c["ok"] & (c["m_bound"] > 32*mp) & (core_r > c["r50_bound"])
 
@@ -48,7 +48,7 @@ def final_radii(sim_dir, part_info, target_subs=None):
         r_host = np.sqrt(np.sum(x_i**2, axis=1))
         rf[i] = np.ones(len(ok))*-1
         rf[i][ok] = r_host[ok]
-        
+
         r_sub = np.sqrt(np.sum((x_i - c[i,-1]["x"])**2, axis=1))
         in_halo[i] = np.zeros(len(ok), dtype=bool)
 
@@ -120,26 +120,26 @@ def weighted_mean_profile(sim_dir, r_bins, r, mp_star, x,
     ok = mass_hist > 0
     ratio = np.ones(n_bins)*-np.inf
     ratio[ok] = x_hist[ok]/mass_hist[ok]
-    
+
     return ratio
 
 
 def main():
-    base_dir = "/oak/stanford/orgs/kipac/users/phil1/simulations/ZoomIns/"
-    #suite = "SymphonyMilkyWay"
-    suite = "MWest"
+    base_dir ="/sdf/scratch/phil1/data/" #"/oak/stanford/orgs/kipac/users/phil1/simulations/ZoomIns/\
+    suite = "SymphonyMilkyWay"
+    plot_dir = "/sdf/home/t/tdacunha/plots/stellar_halo/"
 
     param = symlib.simulation_parameters(suite)
-    n_hosts = symlib.n_hosts(suite)
+    n_hosts = 1#symlib.n_hosts(suite)
 
     # Set up density profiles
     n_bins = 50
     r_bins = np.logspace(-2, 0, n_bins + 1) # In units of Rvir(z=0)
     rho_high_mass = []
-    rho_low_mass = [] 
+    rho_low_mass = []
     rho_high_Fe_H = []
-    rho_mid_Fe_H = [] 
-    rho_low_Fe_H = [] 
+    rho_mid_Fe_H = []
+    rho_low_Fe_H = []
     mean_Fe_H_low_mass = []
     mean_Fe_H_high_mass = []
 
@@ -157,7 +157,7 @@ def main():
     m_star_gal = []
     mpeak_sub = []
     n_hosts_used = 0
-    for i in range(n_hosts):
+    for i in [n_hosts]:#range(n_hosts):
         print("Host %2d/%d" % (i, n_hosts))
 
         # This function lets you loop over all the subhalo directories without
@@ -205,7 +205,7 @@ def main():
             is_high_Fe_H[j] = Fe_H[j] > FE_H_HIGH
             is_low_Fe_H[j] = Fe_H[j] < FE_H_LOW
             is_mid_Fe_H[j] = (~is_high_Fe_H[j]) & (~is_low_Fe_H[j])
-            
+
         # Compute density profiles, add to running averages.
         rho_high_mass.append(density_profile(
             sim_dir, r_bins, rf, mp_star, in_halo,
@@ -245,7 +245,7 @@ def main():
     # Plotting nonsense from here on
     fig, ax = plt.subplots()
     r_mid = np.sqrt(r_bins[1:]*r_bins[:-1])
-    
+
     med_rho_high_mass = np.median(rho_high_mass, axis=0)
     med_rho_low_mass = np.median(rho_low_mass, axis=0)
 
@@ -265,11 +265,11 @@ def main():
     ax.set_ylim(1e-4, None)
     ax.legend(loc="upper right", fontsize=17)
 
-    fig.savefig("../plots/stellar_halo/average_density_%s.png" % suite)
+    fig.savefig(plot_dir+"average_density_%s.png" % suite)
 
     fig, ax = plt.subplots()
     r_mid = np.sqrt(r_bins[1:]*r_bins[:-1])
-    
+
     med_rho_high_Fe_H = np.median(rho_high_Fe_H, axis=0)
     med_rho_mid_Fe_H = np.median(rho_mid_Fe_H, axis=0)
     med_rho_low_Fe_H = np.median(rho_low_Fe_H, axis=0)
@@ -294,11 +294,11 @@ def main():
     ax.set_ylim(1e-4, None)
     ax.legend(loc="upper right", fontsize=17)
 
-    fig.savefig("../plots/stellar_halo/Fe_H_density_%s.png" % suite)
+    fig.savefig(plot_dir+"Fe_H_density_%s.png" % suite)
 
     fig, ax = plt.subplots()
     r_mid = np.sqrt(r_bins[1:]*r_bins[:-1])
-    
+
     med_Fe_H_high_mass = np.median(mean_Fe_H_high_mass, axis=0)
     med_Fe_H_low_mass = np.median(mean_Fe_H_low_mass, axis=0)
 
@@ -321,7 +321,7 @@ def main():
 
     total_rho = med_rho_low_mass + med_rho_high_mass
     ok = (total_rho > rho_cut) & (~np.isinf(med_Fe_H_low_mass)) & (~np.isinf(med_Fe_H_high_mass))
-    mean_Fe_H = (med_rho_high_mass[ok]*med_Fe_H_high_mass[ok] + 
+    mean_Fe_H = (med_rho_high_mass[ok]*med_Fe_H_high_mass[ok] +
                  med_rho_low_mass[ok]*med_Fe_H_low_mass[ok]) / total_rho[ok]
     ax.plot(r_mid[ok], mean_Fe_H, c="k")
     ax.set_xlabel(r"$r/R_{\rm vir}$")
@@ -330,12 +330,12 @@ def main():
     ax.legend(loc="upper right", fontsize=17)
     ylo, yhi = plt.ylim()
     plt.ylim(ylo, yhi + 0.15*(yhi - ylo))
-    fig.savefig("../plots/stellar_halo/average_Fe_H_%s.png" % suite)
+    fig.savefig(plot_dir+"average_Fe_H_%s.png" % suite)
 
     fig, ax = plt.subplots()
 
     order = np.argsort(mpeak_sub)
-    
+
     m_star_gal_sum = np.cumsum(m_star_gal[order])
     m_star_halo_sum = np.cumsum(m_star_halo[order])
 
@@ -350,6 +350,6 @@ def main():
     ax.set_yscale("log")
     ax.set_ylim(1e4, None)
 
-    fig.savefig("../plots/stellar_halo/star_contribution_cdf_%s.png" % suite)
+    fig.savefig(plot_dir+"star_contribution_cdf_%s.png" % suite)
 
 if __name__ == "__main__": main()
