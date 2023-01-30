@@ -131,6 +131,7 @@ def main():
 
     param = symlib.simulation_parameters(suite)
     n_hosts = 1#symlib.n_hosts(suite)
+    Halo = "Halo023"
 
     # Set up density profiles
     n_bins = 50
@@ -157,12 +158,12 @@ def main():
     m_star_gal = []
     mpeak_sub = []
     n_hosts_used = 0
-    for i in [n_hosts]:#range(n_hosts):
+    for halo in [Halo]:#range(n_hosts):
         print("Host %2d/%d" % (i, n_hosts))
 
         # This function lets you loop over all the subhalo directories without
         # needing to know them by name.
-        sim_dir = symlib.get_host_directory(base_dir, suite, "Halo023")
+        sim_dir = symlib.get_host_directory(base_dir, suite, halo)
 
         # Shared information on ownership and offsets needed to
         # decompress files.
@@ -174,13 +175,10 @@ def main():
         # a couple small ones for debugging and then changing it back to
         # everything later. Don't include halo 0.
         target_subs = np.arange(1, len(h))
-        print(target_subs)
         target_subs_ok = np.zeros(len(target_subs), dtype=bool)
         for i in range(len(target_subs)):
             target_subs_ok[i] = symlib.is_real_confirmed(
                 part_info, h, target_subs[i])
-            if i < 10:
-                print(target_subs_ok[i])
         target_subs = target_subs[target_subs_ok]
         print(target_subs)
         # mp_star is a list of arrays giving the stellar mass of each particle.
