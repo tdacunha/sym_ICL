@@ -159,7 +159,7 @@ def main():
     mpeak_sub = []
     n_hosts_used = 0
     for halo in [Halo]:#range(n_hosts):
-        print("Host %2d/%d" % (halo, n_hosts))
+        print("Host %2d/%d" % (n_hosts, n_hosts))
 
         # This function lets you loop over all the subhalo directories without
         # needing to know them by name.
