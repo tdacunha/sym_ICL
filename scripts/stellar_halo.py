@@ -185,7 +185,7 @@ def main():
             tsnap = tags.snap[target_subs[i]]
             val = (tags.snap[target_subs[i]] <= snap) #all false
             #valid = val[tags.flag[target_subs[i]]==0] #all false
-            print(val)
+            print(tsnap)
             #ok = symlib.read_particles(part_info, None, first_snap, "valid", owner=target_subs[i])
             #print(ok)
         target_subs = target_subs[target_subs_ok]
