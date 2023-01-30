@@ -162,7 +162,7 @@ def main():
 
         # This function lets you loop over all the subhalo directories without
         # needing to know them by name.
-        sim_dir = symlib.get_host_directory(base_dir, suite, i)
+        sim_dir = symlib.get_host_directory(base_dir, suite, "Halo023")
 
         # Shared information on ownership and offsets needed to
         # decompress files.
