@@ -182,8 +182,10 @@ def main():
             first_snap = np.where(h[target_subs[i]]["ok"])[0][0] # checking
             tags = part_info.tags
             snap = first_snap
-            valid = (tags.flag[target_subs[i]]==0) #(tags.snap[target_subs[i]] <= snap)
-            print(valid)
+            tsnap = tags.snap[target_subs[i]]
+            val = (tags.snap[target_subs[i]] <= snap) #all false
+            #valid = val[tags.flag[target_subs[i]]==0] #all false
+            print(val)
             #ok = symlib.read_particles(part_info, None, first_snap, "valid", owner=target_subs[i])
             #print(ok)
         target_subs = target_subs[target_subs_ok]
