@@ -175,18 +175,18 @@ def main():
         # a couple small ones for debugging and then changing it back to
         # everything later. Don't include halo 0.
         c = symlib.read_cores(sim_dir)
-        print('length of cores', len(c))
-        print('length of halos', len(h))
+        #print('length of cores', len(c))
+        #print('length of halos', len(h))
         target_subs = np.arange(1, len(h))
 
         target_subs_ok = np.zeros(len(target_subs), dtype=bool)
         for i in range(len(target_subs)):
             target_subs_ok[i] = symlib.is_real_confirmed(
                 part_info, h, target_subs[i])
-            first_snap = np.where(h[target_subs[i]]["ok"])[0][0] # checking
-            tags = part_info.tags
-            snap = first_snap # this is around 23, 46, etc
-            tsnap = tags.snap[target_subs[i]] # these are all 234, 235
+            #first_snap = np.where(h[target_subs[i]]["ok"])[0][0] # checking
+            #tags = part_info.tags
+            #snap = first_snap # this is around 23, 46, etc
+            #tsnap = tags.snap[target_subs[i]] # these are all 234, 235
             #val = (tags.snap[target_subs[i]] <= snap) # so this all false
             #valid = val[tags.flag[target_subs[i]]==0] #all false
             #print('first=',first_snap, tsnap)
